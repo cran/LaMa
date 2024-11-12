@@ -12,20 +12,20 @@ options(rmarkdown.html_vignette.check_title = FALSE)
 
 ## ----setup--------------------------------------------------------------------
 # loading the package
-library("LaMa")
+library(LaMa)
 
 ## ----data_pooling-------------------------------------------------------------
-K = 100 # number of individuals, for example different animals
-
 # parameters are shared across individuals
-mu = c(15, 60)
-sigma = c(10, 40)
-Gamma = matrix(c(0.95, 0.05, 0.15, 0.85), nrow = 2, byrow = TRUE)
-delta = stationary(Gamma) # stationary HMM
+mu = c(15, 60) # state-dependent means
+sigma = c(10, 40) # state-dependent standard deviations
+Gamma = matrix(c(0.95, 0.05, 0.15, 0.85), nrow = 2, byrow = TRUE) # t.p.m.
+delta = stationary(Gamma) # stationary distribution
 
 # simulation of all tracks
 set.seed(123)
-n = 30 # observations per animal only (but many animals)
+K = 200 # number of individuals, for example different animals
+n = 50 # observations per animal only (but many animals)
+
 s = x = rep(NA, n*K)
 for(k in 1:K){
   sk = xk = rep(NA, n)
@@ -39,29 +39,31 @@ for(k in 1:K){
   x[(k-1)*n + 1:n] = xk
 }
 
+trackID = rep(1:K, each = n)
+
 ## ----mllk_pool----------------------------------------------------------------
 # fast version using trackInd in forward()
-mllk_pool = function(theta.star, x, trackInd){
-  Gamma = tpm(theta.star[1:2])
+nll_pool = function(par, x, trackID){
+  Gamma = tpm(par[1:2])
   delta = stationary(Gamma)
-  mu = theta.star[3:4]
-  sigma = exp(theta.star[5:6])
+  mu = par[3:4]
+  sigma = exp(par[5:6])
   allprobs = matrix(1, length(x), 2)
-  for(j in 1:2){ allprobs[,j] = dnorm(x, mu[j], sigma[j]) }
+  for(j in 1:2) allprobs[,j] = dnorm(x, mu[j], sigma[j])
   
   # here we add trackInd as an argument to forward()
-  -forward(delta, Gamma, allprobs, trackInd)
+  -forward(delta, Gamma, allprobs, trackID)
 }
 
 # slow alternative looping over individuals in R
-mllk_pool_slow = function(theta.star, x, K){
-  n = length(x)/K
-  Gamma = tpm(theta.star[1:2])
+nll_pool_slow = function(par, x, K){
+  n = length(x) / K
+  Gamma = tpm(par[1:2])
   delta = stationary(Gamma)
-  mu = theta.star[3:4]
-  sigma = exp(theta.star[5:6])
+  mu = par[3:4]
+  sigma = exp(par[5:6])
   allprobs = matrix(1, length(x), 2)
-  for(j in 1:2){ allprobs[,j] = dnorm(x, mu[j], sigma[j]) }
+  for(j in 1:2) allprobs[,j] = dnorm(x, mu[j], sigma[j])
   
   # here we just loop over individuals in R
   l = 0
@@ -71,29 +73,21 @@ mllk_pool_slow = function(theta.star, x, K){
   -l
 }
 
-## ----model_pool, warning=FALSE------------------------------------------------
-# defining the indices where a new track begins
-trackInd = n*(0:(K-1)) + 1
-
-# In a real data scenario, we would typically have an ID column in the data set.
-# We can then use the function calc_trackInd() to calculate the trackInd vector:
-ID = rep(1:K, each = n)
-trackInd = calc_trackInd(ID)
-# the ID variable does not have to be numeric, it can also be a character vector.
-
+## ----model_pool, warning=FALSE, cache = TRUE----------------------------------
 # initial parameter vector
-theta.star = c(-1,-1, # off-diagonals of Gamma (on logit scale)
-               15,60,log(10),log(40)) # mu and sigma
+par = c(logitgamma = c(-1,-1), # off-diagonals of Gamma (on logit scale)
+        mu = c(15, 60), # state-dependent means
+        logsigma = c(log(10),log(40))) # state-dependent sds
 
 # fast version:
-s = Sys.time()
-mod = nlm(mllk_pool, theta.star, x = x, trackInd = trackInd)
-Sys.time()-s
+system.time(
+  mod <- nlm(nll_pool, par, x = x, trackID = trackID)
+)
 
 # slow version
-s = Sys.time()
-mod = nlm(mllk_pool_slow, theta.star, x = x, K = K)
-Sys.time()-s
+system.time(
+  mod <- nlm(nll_pool_slow, par, x = x, K = K)
+)
 
 ## ----data_partial-------------------------------------------------------------
 K = 5 # number of individuals, for example different animals
@@ -130,31 +124,29 @@ for(k in 1:K){
 
 ## ----mllk_partial-------------------------------------------------------------
 # fast version using trackInd in forward()
-mllk_partial = function(theta.star, x, z, trackInd){
+nll_partial = function(par, x, z, trackID){
   # individual-specific tpms
-  beta = matrix(theta.star[1:4], nrow = 2)
+  beta = matrix(par[1:4], nrow = 2)
   Gamma = tpm_g(z, beta)
-  Delta = matrix(NA, length(z), 2)
-  for(k in 1:length(z)) Delta[k,] = stationary(Gamma[,,k])
-  mu = theta.star[5:6]
-  sigma = exp(theta.star[7:8])
+  Delta = t(sapply(1:k, function(k) stationary(Gamma[,,k])))
+  mu = par[5:6]
+  sigma = exp(par[7:8])
   allprobs = matrix(1, length(x), 2)
-  for(j in 1:2){ allprobs[,j] = dnorm(x, mu[j], sigma[j]) }
-  
+  for(j in 1:2) allprobs[,j] = dnorm(x, mu[j], sigma[j])
   # just handing a Delta matrix and Gamma array for all individuals to forward()
-  -forward(Delta, Gamma, allprobs, trackInd)
+  -forward(Delta, Gamma, allprobs, trackID)
 }
 
 ## ----model_partial, warning=FALSE---------------------------------------------
 # again defining all the indices where a new track begins
-ID = rep(1:K, each = n)
-trackInd = calc_trackInd(ID)
+trackID = rep(1:K, each = n)
 
 # initial parameter vector
-theta.star = c(-2,-2,0,0, # beta
-               15,60,log(10),log(40)) # mu and sigma
+par = c(beta = c(-2, -2, 0, 0), # beta
+        mu = c(15, 60), # state-dependent means
+        log(10), log(40)) # state-dependent sds
 
-s = Sys.time()
-mod_partial = nlm(mllk_partial, theta.star, x = x, z = z, trackInd = trackInd)
-Sys.time()-s
+system.time(
+  mod_partial <- nlm(nll_partial, par, x = x, z = z, trackID = trackID)
+)
 

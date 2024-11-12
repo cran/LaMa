@@ -9,54 +9,60 @@ knitr::opts_chunk$set(
 )
 options(rmarkdown.html_vignette.check_title = FALSE)
 
-## ----setup--------------------------------------------------------------------
-# loading the package
-library("LaMa")
+library(LaMa)
+
+## ----tpm----------------------------------------------------------------------
+(Gamma = tpm(c(-2, -3))) # 2 states -> 2*(1-2) = 2 off-diagonal entries
+
+## ----stationary---------------------------------------------------------------
+(delta = stationary(Gamma))
 
 ## ----data---------------------------------------------------------------------
 # parameters
-mu = c(0, 6)
-sigma = c(2, 4)
-Gamma = matrix(c(0.95, 0.05, 0.15, 0.85), nrow = 2, byrow = TRUE)
-delta = stationary(Gamma) # stationary HMM
+mu = c(0, 6)    # state-dependent means
+sigma = c(2, 4) # state-dependent standard deviations
+Gamma = matrix(c(0.95, 0.05, 0.15, 0.85), # transition probability matrix
+               nrow = 2, byrow = TRUE)
+delta = stationary(Gamma) # stationary distribution
 
 # simulation
 n = 1000
 set.seed(123)
-s = x = rep(NA, n)
-s[1] = sample(1:2, 1, prob = delta)
-x[1] = rnorm(1, mu[s[1]], sigma[s[1]])
+s = rep(NA, n)
+s[1] = sample(1:2, 1, prob = delta) # sampling first state from delta
 for(t in 2:n){
-  # we draw the next state conditional on the last one
+  # drawing the next state conditional on the last one
   s[t] = sample(1:2, 1, prob = Gamma[s[t-1],]) 
-  # we draw the observation conditional on the current state
-  x[t] = rnorm(1, mu[s[t]], sigma[s[t]])
 }
+# drawing the observation conditional on the states
+x = rnorm(n, mu[s], sigma[s])
 
 color = c("orange", "deepskyblue")
 plot(x[1:200], bty = "n", pch = 20, ylab = "x", 
      col = color[s[1:200]])
 
 ## ----mllk---------------------------------------------------------------------
-mllk = function(theta.star, x){
-  # parameter transformations for unconstraint optimization
-  Gamma = LaMa::tpm(theta.star[1:2])
-  delta = LaMa::stationary(Gamma) # stationary HMM
-  mu = theta.star[3:4]
-  sigma = exp(theta.star[5:6])
-  # calculate all state-dependent probabilities outside the forward algorithm
+nll = function(par, x){
+  # parameter transformations for unconstrained optimisation
+  Gamma = tpm(par[1:2]) # multinomial logistic link
+  delta = stationary(Gamma) # stationary initial distribution
+  mu = par[3:4] # no transformation needed
+  sigma = exp(par[5:6]) # strictly positive
+  # calculating all state-dependent probabilities outside the forward algorithm
   allprobs = matrix(1, length(x), 2)
-  for(j in 1:2){ allprobs[,j] = stats::dnorm(x, mu[j], sigma[j]) }
-  # return negative for minimization
-  -LaMa::forward(delta, Gamma, allprobs)
+  for(j in 1:2) allprobs[,j] = dnorm(x, mu[j], sigma[j])
+  # return negative for minimisation
+  -forward(delta, Gamma, allprobs)
 }
 
 ## ----model, warning=FALSE-----------------------------------------------------
-theta.star = c(-1,-1,1,4,log(1),log(3)) 
+par = c(logitGamma = qlogis(c(0.05, 0.05)),
+        mu = c(1,4),
+        logsigma = c(log(1),log(3)))
 # initial transformed parameters: not chosen too well
-s = Sys.time()
-mod = nlm(mllk, theta.star, x = x)
-Sys.time()-s
+system.time(
+  mod <- nlm(nll, par, x = x)
+)
 
 ## ----visualization------------------------------------------------------------
 # transform parameters to working
@@ -75,11 +81,27 @@ legend("topright", col = c(color, "black"), lwd = 2, bty = "n",
 
 ## ----states-------------------------------------------------------------------
 allprobs = matrix(1, length(x), 2)
-for(j in 1:2){ allprobs[,j] = dnorm(x, mu[j], sigma[j]) }
+for(j in 1:2) allprobs[,j] = dnorm(x, mu[j], sigma[j])
 
 states = viterbi(delta, Gamma, allprobs)
 
 plot(x, pch = 20, bty = "n", col = color[states])
 legend("topright", pch = 20, legend = c("state 1", "state 2"), 
        col = color, box.lwd = 0)
+
+## ----stateprobs---------------------------------------------------------------
+probs = stateprobs(delta, Gamma, allprobs)
+
+## ----pseudores----------------------------------------------------------------
+pres = pseudo_res(x, # observations
+                  "norm", # parametric distribution to use
+                  list(mean = mu, sd = sigma), # parameters for that distribution
+                  probs) # local state probabilities
+
+oldpar = par(mfrow = c(1,2))
+hist(pres, prob = TRUE, bor = "white")
+curve(dnorm(x), lty = 2, add = TRUE)
+qqnorm(pres, pch = 16, col = "#00000020", bty = "n")
+qqline(pres, col = "orange")
+par(oldpar)
 

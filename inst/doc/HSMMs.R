@@ -8,9 +8,15 @@ knitr::opts_chunk$set(
   out.width = "85%"
 )
 
+# check if MSwM is installed and if not install
+if(!require("PHSMM")){
+  options(repos = c(CRAN = "https://cloud.r-project.org"))
+  install.packages("PHSMM")
+}
+
 ## ----setup--------------------------------------------------------------------
 # loading the package
-library("LaMa")
+library(LaMa)
 
 ## ----parameters---------------------------------------------------------------
 lambda = c(7, 4, 4)
@@ -50,113 +56,88 @@ legend("topright", col = color, pch = 20,
        legend = paste("state", 1:3), box.lwd = 0)
 
 ## ----mllk---------------------------------------------------------------------
-mllk = function(theta.star, x, N, agsizes){
-  mu = theta.star[1:N]
-  sigma = exp(theta.star[N+1:N])
-  lambda = exp(theta.star[2*N+1:N])
-  if(N>2){ 
-    # this is a bit complicated as we need the diagonal elements to be zero
-    omega = matrix(0,N,N)
-    omega[!diag(N)] = as.vector(t(matrix(c(rep(1,N),
-                          exp(theta.star[3*N+1:(N*(N-2))])),N,N-1)))
-    omega = t(omega)/apply(omega,2,sum)
-  } else{ omega = matrix(c(0,1,1,0),2,2) }
+nll = function(par, x, N, agsizes){
+  mu = par[1:N]
+  sigma = exp(par[N+1:N])
+  lambda = exp(par[2*N+1:N])
+  omega = if(N==2) tpm_emb() else tpm_emb(par[3*N+1:(N*(N-2))])
   dm = list() # list of dwell-time distributions
-  for(j in 1:N){ dm[[j]] = dpois(1:agsizes[j]-1, lambda[j]) } # shifted Poisson
-  Gamma = LaMa::tpm_hsmm(omega, dm)
-  delta = LaMa::stationary(Gamma)
+  for(j in 1:N) dm[[j]] = dpois(1:agsizes[j]-1, lambda[j]) # shifted Poisson
+  Gamma = tpm_hsmm(omega, dm, sparse = FALSE)
+  delta = stationary(Gamma)
   allprobs = matrix(1, length(x), N)
   ind = which(!is.na(x))
   for(j in 1:N){
     allprobs[ind,j] = dnorm(x[ind], mu[j], sigma[j])
   }
-  -LaMa::forward_s(delta, Gamma, allprobs, agsizes)
+  -forward_s(delta, Gamma, allprobs, agsizes)
 }
 
 ## ----model--------------------------------------------------------------------
 # intial values
-theta.star = c(10, 40, 100, log(c(5, 20, 50)), # state-dependent
+par = c(10, 40, 100, log(c(5, 20, 50)), # state-dependent
                log(c(7,4,4)), # dwell time means
                rep(0, 3)) # omega
 
 agsizes = qpois(0.95, lambda)+1
 
-t1 = Sys.time()
-mod = nlm(mllk, theta.star, x = x, N = 3, agsizes = agsizes, stepmax = 2)
-Sys.time()-t1
+system.time(
+  mod <- nlm(nll, par, x = x, N = 3, agsizes = agsizes, stepmax = 2)
+)
 
 ## ----results------------------------------------------------------------------
 N = 3
 (mu = mod$estimate[1:N])
 (sigma = exp(mod$estimate[N+1:N]))
 (lambda = exp(mod$estimate[2*N+1:N]))
-omega = matrix(0,N,N)
-omega[!diag(N)] = as.vector(t(matrix(c(rep(1,N),
-                          exp(mod$estimate[3*N+1:(N*(N-2))])),N,N-1)))
-omega = t(omega)/apply(omega,2,sum)
-omega
+(omega = tpm_emb(mod$estimate[3*N+1:(N*(N-2))]))
 
 ## ----muskox_data--------------------------------------------------------------
-# install.packages("PHSMM")
-data = PHSMM::muskox[1:1000,] # only using first 1000 observations for speed
+library(PHSMM)
+data = muskox[1:1000, ] # only using first 1000 observations for speed
 head(data)
 
 ## ----muskox_likelihood--------------------------------------------------------
-mllk_muskox = function(theta.star, step, N, agsizes){
+nll_muskox = function(par, step, N, agsizes){
   # parameter transformation from working to natural
-  mu = exp(theta.star[1:N]) # step mean
-  sigma = exp(theta.star[N+1:N]) # step standard deviation
-  mu_dwell = exp(theta.star[2*N+1:N]) # dwell time mean
-  phi = exp(theta.star[3*N+1:N]) # dwell time dispersion
-  if(N>2){ 
-    # conditional transition probability matrix
-    omega = matrix(0,N,N)
-    omega[!diag(N)] = as.vector(t(matrix(c(rep(1,N),
-                          exp(theta.star[4*N+1:(N*(N-2))])),N,N-1)))
-    omega = t(omega)/apply(omega,2,sum)
-  } else{ omega = matrix(c(0,1,1,0),2,2) }
+  mu = exp(par[1:N]) # step mean
+  sigma = exp(par[N+1:N]) # step standard deviation
+  mu_dwell = exp(par[2*N+1:N]) # dwell time mean
+  phi = exp(par[3*N+1:N]) # dwell time dispersion
+  omega = if(N==2) tpm_emb() else tpm_emb(par[4*N+1:(N*(N-2))])
   dm = list() # list of dwell-time distributions
   for(j in 1:N){ 
-    # R allows to parametrize by mean and size where size = 1/dispersion
     dm[[j]] = dnbinom(1:agsizes[j]-1, mu=mu_dwell[j], size=1/phi[j]) 
   }
-  Gamma = LaMa::tpm_hsmm(omega, dm)
-  delta = LaMa::stationary(Gamma)
+  Gamma = tpm_hsmm(omega, dm, sparse = FALSE)
+  delta = stationary(Gamma)
   allprobs = matrix(1, length(step), N)
   ind = which(!is.na(step))
-  for(j in 1:N){
-    # we reparametrise the gamma distribution in terms of mean and sd
-    allprobs[ind,j] = dgamma(step[ind], shape = mu[j]^2 / sigma[j]^2, 
-                             scale = sigma[j]^2 / mu[j])
-  }
-  -LaMa::forward_s(delta, Gamma, allprobs, agsizes)
+  for(j in 1:N) allprobs[ind,j] = dgamma2(step[ind], mu[j], sigma[j])
+  -forward_s(delta, Gamma, allprobs, agsizes)
 }
 
-## ----model_muskox, warning=FALSE, cache = TRUE--------------------------------
+## ----model_muskox, warning = FALSE, cache = TRUE------------------------------
 # intial values
-theta.star = c(log(c(4, 50, 300, 4, 50, 300)), # state-dependent mean and sd
+par = c(log(c(4, 50, 300, 4, 50, 300)), # state-dependent mean and sd
                log(c(3,3,5)), # dwell time means
                log(c(0.01, 0.01, 0.01)), # dwell time dispersion
                rep(0, 3)) # omega
 
 agsizes = c(11,11,14)
 
-t1 = Sys.time()
-mod_muskox = nlm(mllk_muskox, theta.star, step=data$step, N=3,
-                 agsizes=agsizes,iterlim = 500)
-Sys.time()-t1
+system.time(
+  mod_muskox <- nlm(nll_muskox, par, step = data$step, N = 3,
+                    agsizes = agsizes, iterlim = 500)
+)
 
 ## ----results_muskox-----------------------------------------------------------
-theta.star = mod_muskox$estimate; N = 3
-(mu = exp(theta.star[1:N])) # step mean
-(sigma = exp(theta.star[N+1:N])) # step standard deviation
-(mu_dwell = exp(theta.star[2*N+1:N])) # dwell time mean
-(phi = exp(theta.star[3*N+1:N])) # dwell time dispersion
-omega = matrix(0,N,N)
-omega[!diag(N)] = as.vector(t(matrix(c(rep(1,N),
-                        exp(theta.star[4*N+1:(N*(N-2))])),N,N-1)))
-omega = t(omega)/apply(omega,2,sum)
-omega
+par = mod_muskox$estimate; N = 3
+(mu = exp(par[1:N])) # step mean
+(sigma = exp(par[N+1:N])) # step standard deviation
+(mu_dwell = exp(par[2*N+1:N])) # dwell time mean
+(phi = exp(par[3*N+1:N])) # dwell time dispersion
+(omega = tpm_emb(par[4*N+1:(N*(N-2))])) # embedded t.p.m.
 
 ## ----dwell_muskox-------------------------------------------------------------
 oldpar = par(mfrow = c(1,3))

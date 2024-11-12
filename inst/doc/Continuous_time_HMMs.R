@@ -10,15 +10,12 @@ knitr::opts_chunk$set(
 
 ## ----setup--------------------------------------------------------------------
 # loading the package
-library("LaMa")
+library(LaMa)
 
 ## ----parameters---------------------------------------------------------------
-# 2-state example
-
 # generator matrix Q:
-Q = matrix(c(-0.5,0.5,1,-1), nrow = 2, byrow = TRUE)
-# state 1 has a smaller rate (dwell-time in state one ~ Exp(1)), i.e. it exhibits 
-# longer dwell times than state 3 with rate 3.
+Q = matrix(c(-0.5, 0.5, 1, -1), 
+           nrow = 2, byrow = TRUE)
 
 # parameters for the state-dependent (normal) distributions
 mu = c(5, 20)
@@ -57,34 +54,30 @@ legend("topright", lwd = 2, col = color,
        legend = c("state 1", "state 2"), box.lwd = 0)
 
 ## ----mllk---------------------------------------------------------------------
-mllk = function(theta.star, timediff, x, N=2){
-  mu = theta.star[1:N]
-  sigma = exp(theta.star[N+1:N])
-  Q = diag(N) # generator matrix
-  Q[!Q] = exp(theta.star[2*N+1:(N*(N-1))])
-  diag(Q) = 0
-  diag(Q) = -rowSums(Q)
-  delta = solve(t(Q+1), rep(1,N), tol = 1e-20) # stationary distribution of the
-  # continuous-time Markov chain
-  Qube = LaMa::tpm_cont(Q, timediff) # this computes exp(Q*timediff)
+nll = function(par, timediff, x, N){
+  mu = par[1:N]
+  sigma = exp(par[N+1:N])
+  Q = generator(par[2*N+1:(N*(N-1))]) # generator matrix
+  Pi = stationary_cont(Q) # stationary dist of CT Markov chain
+  Qube = tpm_cont(Q, timediff) # this computes exp(Q*timediff)
   allprobs = matrix(1, nrow = length(x), ncol = N)
   ind = which(!is.na(x))
   for(j in 1:N){
     allprobs[ind,j] = dnorm(x[ind], mu[j], sigma[j])
   }
-  -LaMa::forward_g(delta, Qube, allprobs)
+  -forward_g(Pi, Qube, allprobs)
 }
 
 ## ----model, warning=FALSE-----------------------------------------------------
-theta.star = c(5, 15, log(3), log(5), # mu and sigma
-                log(1), log(0.5)) # off-diagonals of Q
+par = c(mu = c(5, 15), # state-dependent means
+        logsigma = c(log(3), log(5)), # state-dependent sds
+        qs = c(log(1), log(0.5))) # off-diagonals of Q
 
 timediff = diff(obs_times)
 
-t1 = Sys.time()
-mod = nlm(mllk, theta.star, timediff=timediff, x=x, stepmax = 10)
-# we often need the stepmax, as the matrix exponential can be numerically unstable
-Sys.time()-t1
+system.time(
+  mod <- nlm(nll, par, timediff = timediff, x = x, N = 2)
+)
 
 ## ----results------------------------------------------------------------------
 N = 2
@@ -92,15 +85,10 @@ N = 2
 round(mod$estimate[1:N],2)
 # sigma
 round(exp(mod$estimate[N+1:N]))
-Q = diag(N) # generator matrix
-Q[!Q] = exp(mod$estimate[2*N+1:(N*(N-1))])
-diag(Q) = 0
-diag(Q) = -rowSums(Q)
+Q = generator(mod$estimate[2*N+1:(N*(N-1))])
 round(Q,3)
 
 ## ----parameters2--------------------------------------------------------------
-# 2-state example
-
 # generator matrix Q:
 Q = matrix(c(-0.5,0.2,0.3,
              1,-2, 1,
@@ -134,14 +122,16 @@ for(t in 2:k){
 }
 
 ## ----model2, warning=FALSE----------------------------------------------------
-theta.star = c(5, 10, 25, log(2), log(2), log(6), # mu and sigma
-                rep(0, 6)) # off-diagonals of Q
+par = c(mu = c(5, 10, 25), # state-dependent means
+        logsigma = c(log(2), log(2), log(6)), # state-dependent sds
+        qs = rep(0, 6)) # off-diagonals of Q
 
 timediff = diff(obs_times)
 
-t1 = Sys.time()
-mod2 = nlm(mllk, theta.star, timediff=timediff, x=x, N = 3, stepmax = 10)
-Sys.time()-t1
+system.time(
+  mod2 <- nlm(nll, par, timediff = timediff, x = x, N = 3, stepmax = 10)
+)
+# without restricting stepmax, we run into numerical problems
 
 ## ----results2-----------------------------------------------------------------
 N = 3
@@ -149,9 +139,6 @@ N = 3
 round(mod2$estimate[1:N],2)
 # sigma
 round(exp(mod2$estimate[N+1:N]),2)
-Q = diag(N) # generator matrix
-Q[!Q] = exp(mod2$estimate[2*N+1:(N*(N-1))])
-diag(Q) = 0
-diag(Q) = -rowSums(Q)
+Q = generator(mod2$estimate[2*N+1:(N*(N-1))])
 round(Q, 3)
 

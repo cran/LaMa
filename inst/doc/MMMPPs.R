@@ -10,7 +10,7 @@ knitr::opts_chunk$set(
 
 ## ----setup--------------------------------------------------------------------
 # loading the package
-library("LaMa")
+library(LaMa)
 
 ## ----parameters---------------------------------------------------------------
 # state-dependent rates
@@ -52,40 +52,40 @@ segments(x0 = c(0,trans_times[1:98]), x1 = trans_times[1:99],
 legend("top", lwd = 2, col = color, legend = c("state 1", "state 2"), box.lwd = 0)
 
 ## ----mllk---------------------------------------------------------------------
-mllk = function(theta.star, timediff, N=2){
-  lambda = exp(theta.star[1:N]) # state specific rates
-  Q = diag(N) # generator matrix
-  Q[!Q] = exp(theta.star[N+1:(N*(N-1))])
-  diag(Q) = 0
-  diag(Q) = -rowSums(Q)
-  Qube = LaMa::tpm_cont(Q-diag(lambda), timediff) # exp((Q-Lambda)*deltat)
-  allprobs = matrix(lambda, nrow = length(timediff+1), ncol = N, byrow = T)
+nll = function(par, timediff, N){
+  lambda = exp(par[1:N]) # state specific rates
+  Q = generator(par[N+1:(N*(N-1))])
+  Pi = stationary_cont(Q)
+  Qube = tpm_cont(Q - diag(lambda), timediff) # exp((Q-Lambda) * dt)
+  allprobs = matrix(lambda, nrow = length(timediff + 1), ncol = N, byrow = T)
   allprobs[1,] = 1
-  delta = solve(t(Q+1), rep(1,N), tol = 1e-20)
-  -LaMa::forward_g(delta, Qube, allprobs)
+  -forward_g(Pi, Qube, allprobs)
 }
 
 ## ----model, warning=FALSE-----------------------------------------------------
-theta.star = log(c(2, 15, # lambda
-                   2, 0.5)) # off-diagonals of Q
+par = log(c(2, 15, # lambda
+            2, 0.5)) # off-diagonals of Q
 
 timediff = diff(arrival_times)
 
-t1 = Sys.time()
-mod = nlm(mllk, theta.star, timediff=timediff, stepmax = 10)
+system.time(
+  mod <- nlm(nll, par, timediff = timediff, N = 2, stepmax = 10)
+)
 # we often need the stepmax, as the matrix exponential can be numerically unstable
-Sys.time()-t1
+
 
 ## ----results------------------------------------------------------------------
-exp(mod$estimate)
+(lambda = exp(mod$estimate[1:2]))
+(Q = generator(mod$estimate[3:4]))
+(Pi = stationary_cont(Q))
 
 ## ----parameters2--------------------------------------------------------------
 # state-dependent rates
 lambda = c(1, 5, 20)
 # generator matrix of the underlying Markov chain
-Q = matrix(c(-0.5,0.3,0.2,
+Q = matrix(c(-0.5, 0.3, 0.2,
              0.7, -1, 0.3,
-             1 ,1,-2), nrow = 3, byrow = TRUE)
+             1, 1, -2), nrow = 3, byrow = TRUE)
 # parmeters for distributions of state-dependent marks
 # (here normally distributed)
 mu = c(-5, 0, 5)
@@ -137,44 +137,35 @@ legend("topright", lwd = 2, col = color,
        legend = c("state 1", "state 2", "state 3"), box.lwd = 0)
 
 ## ----mllk2--------------------------------------------------------------------
-mllk = function(theta.star, y, timediff, N){
-  lambda = exp(theta.star[1:N]) # state specific rates
-  mu = theta.star[N+1:N]
-  sigma = exp(theta.star[2*N+1:N])
-  Q = diag(N) # generator matrix
-  Q[!Q] = exp(theta.star[3*N+1:(N*(N-1))])
-  diag(Q) = 0
-  diag(Q) = -rowSums(Q)
-  delta = solve(t(Q+1), rep(1,N), tol = 1e-20)
-  Qube = LaMa::tpm_cont(Q-diag(lambda), timediff) # exp((Q-Lambda)*deltat)
+nllMark = function(par, y, timediff, N){
+  lambda = exp(par[1:N]) # state specific rates
+  mu = par[N+1:N]
+  sigma = exp(par[2*N+1:N])
+  Q = generator(par[3*N+1:(N*(N-1))])
+  Pi = stationary_cont(Q)
+  Qube = tpm_cont(Q-diag(lambda), timediff) # exp((Q-Lambda)*deltat)
   allprobs = matrix(1, length(y), N)
-  for(j in 1:N){
-    allprobs[,j] = dnorm(y, mu[j], sigma[j])
-  }
-  allprobs[-1,] = allprobs[-1,] * matrix(lambda, length(y)-1, N, byrow = T)
-  -LaMa::forward_g(delta, Qube, allprobs)
+  for(j in 1:N) allprobs[,j] = dnorm(y, mu[j], sigma[j])
+  allprobs[-1,] = allprobs[-1,] * matrix(lambda, length(y) - 1, N, byrow = T)
+  -forward_g(Pi, Qube, allprobs)
 }
 
 ## ----model2, warning=FALSE----------------------------------------------------
-theta.star = c(log(c(1, 5, 20)), # lambda
-                   -5, 0, 5, # mu
-               log(c(2, 1, 2)), # sigma
-               log(c(0.7, 1, 0.3, 1, 0.2, 0.3))) # Q
+par = c(loglambda = log(c(1, 5, 20)), # lambda
+        mu = c(-5, 0, 5), # mu
+        logsigma = log(c(2, 1, 2)), # sigma
+        qs = log(c(0.7, 1, 0.3, 1, 0.2, 0.3))) # Q
 timediff = diff(arrival_times)
-t1 = Sys.time()
-mod2 = nlm(mllk, theta.star, y = marks, timediff=timediff, N=3, stepmax = 5)
-Sys.time()-t1
+
+system.time(
+  mod2 <- nlm(nllMark, par, y = marks, timediff = timediff, N = 3, stepmax = 5)
+)
 
 ## ----results2-----------------------------------------------------------------
 N = 3
-round(exp(mod2$estimate[1:N]),2)
-# mu
-round(mod2$estimate[N+1:N], 2)
-# sigma
-round(exp(mod2$estimate[2*N+1:N]), 2)
-Q = diag(N)
-Q[!Q] = exp(mod2$estimate[3*N+1:(N*(N-1))])
-diag(Q) = 0
-diag(Q) = -rowSums(Q)
-round(Q, 3)
+(lambda = exp(mod2$estimate[1:N]))
+(mu = mod2$estimate[N+1:N])
+(sigma = exp(mod2$estimate[2*N+1:N]))
+(Q = generator(mod2$estimate[3*N+1:(N*(N-1))]))
+(Pi = stationary_cont(Q))
 
