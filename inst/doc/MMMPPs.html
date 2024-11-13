@@ -482,7 +482,7 @@ state-dependent density matrices to be <span class="math inline">\(\Lambda\)</sp
 <span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a>  mod <span class="ot">&lt;-</span> <span class="fu">nlm</span>(nll, par, <span class="at">timediff =</span> timediff, <span class="at">N =</span> <span class="dv">2</span>, <span class="at">stepmax =</span> <span class="dv">10</span>)</span>
 <span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a>)</span>
 <span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a><span class="co">#&gt;   0.074   0.001   0.075</span></span>
+<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a><span class="co">#&gt;   0.073   0.000   0.074</span></span>
 <span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a><span class="co"># we often need the stepmax, as the matrix exponential can be numerically unstable</span></span></code></pre></div>
 </div>
 <div id="results" class="section level3">
@@ -611,7 +611,7 @@ rates.</p>
 <span id="cb12-8"><a href="#cb12-8" tabindex="-1"></a>  mod2 <span class="ot">&lt;-</span> <span class="fu">nlm</span>(nllMark, par, <span class="at">y =</span> marks, <span class="at">timediff =</span> timediff, <span class="at">N =</span> <span class="dv">3</span>, <span class="at">stepmax =</span> <span class="dv">5</span>)</span>
 <span id="cb12-9"><a href="#cb12-9" tabindex="-1"></a>)</span>
 <span id="cb12-10"><a href="#cb12-10" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb12-11"><a href="#cb12-11" tabindex="-1"></a><span class="co">#&gt;   0.566   0.011   0.578</span></span></code></pre></div>
+<span id="cb12-11"><a href="#cb12-11" tabindex="-1"></a><span class="co">#&gt;   0.571   0.011   0.581</span></span></code></pre></div>
 </div>
 <div id="results-1" class="section level3">
 <h3>Results</h3>
