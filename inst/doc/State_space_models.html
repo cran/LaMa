@@ -425,9 +425,13 @@ y_t \mid g_t \sim N(0, (\beta e^{g_t / 2})^2).
 </div>
 <div id="writing-the-negative-log-likelihood-function" class="section level3">
 <h3>Writing the negative log-likelihood function</h3>
-<p>This likelihood formulation corresponds to a fine discretization of
-the continuous state space into the intervals <code>b</code> with width
-<code>h</code> and midpoints <code>bstar</code>.</p>
+<p>To calculate the likelihood, we need to integrate over the state
+space. We approximate this high-dimensional integral using a midpoint
+quadrature which ultimately results in a fine discretisation of the
+continuous state space into the intervals <code>b</code> with width
+<code>h</code> and midpoints <code>bstar</code> <span class="citation">(<a href="#ref-langrock2011some">Langrock
+2011</a>)</span>. Thus, the likelihood below corresponds to a basic HMM
+likelihood with a large number of states.</p>
 <div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>nll <span class="ot">=</span> <span class="cf">function</span>(par, y, bm, m){</span>
 <span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>  phi <span class="ot">=</span> <span class="fu">plogis</span>(par[<span class="dv">1</span>])</span>
 <span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>  sigma <span class="ot">=</span> <span class="fu">exp</span>(par[<span class="dv">2</span>])</span>
@@ -454,7 +458,7 @@ the continuous state space into the intervals <code>b</code> with width
 <span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a>  mod <span class="ot">&lt;-</span> <span class="fu">nlm</span>(nll, par, <span class="at">y =</span> y, <span class="at">bm =</span> bm, <span class="at">m =</span> m)</span>
 <span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a>)</span>
 <span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a><span class="co">#&gt;   0.671   0.013   0.684</span></span></code></pre></div>
+<span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a><span class="co">#&gt;   0.669   0.015   0.683</span></span></code></pre></div>
 </div>
 <div id="results" class="section level3">
 <h3>Results</h3>

@@ -2,7 +2,7 @@ Package: LaMa
 Type: Package
 Title: Fast Numerical Maximum Likelihood Estimation for Latent Markov
         Models
-Version: 2.0.1
+Version: 2.0.2
 Authors@R: c(
     person(given = "Jan-Ole", family = "Koslik", 
           email = "jan-ole.koslik@uni-bielefeld.de",
@@ -29,8 +29,8 @@ VignetteBuilder: knitr
 Config/testthat/edition: 3
 LazyData: true
 NeedsCompilation: yes
-Packaged: 2024-11-12 13:57:20 UTC; jan-ole
+Packaged: 2024-11-20 13:01:55 UTC; jan-ole
 Author: Jan-Ole Koslik [aut, cre] (<https://orcid.org/0009-0004-1556-9053>)
 Maintainer: Jan-Ole Koslik <jan-ole.koslik@uni-bielefeld.de>
 Repository: CRAN
-Date/Publication: 2024-11-13 08:30:09 UTC
+Date/Publication: 2024-11-20 13:30:02 UTC
