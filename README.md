@@ -1,5 +1,5 @@
 
-# LaMa <img src="man/figures/Logo_LaMa.png" align="right" height=150>
+# LaMa - Latent Markov model toolbox 🛠️ <img src="man/figures/Logo_LaMa.png" align="right" height=150>
 
 <!-- badges: start -->
 
@@ -109,7 +109,7 @@ Other latent Markov model classes:
 We analyse the `trex` data set contained in the package. It contains
 hourly step lengths of a Tyrannosaurus rex, living 66 million years ago.
 To these data, we fit a simple 2-state HMM with state-dependent gamma
-distributions for the step-lengths.
+distributions for the step lengths.
 
 ``` r
 library(LaMa)
@@ -131,11 +131,11 @@ which calculates the log-likelihood via the forward algorithm.
 ``` r
 nll = function(par, step){
   # parameter transformations for unconstrained optimisation
-  Gamma = tpm(par[1:2]) # multinomial logit link
-  delta = stationary(Gamma) # stationary HMM
-  mu = exp(par[3:4])
-  sigma = exp(par[5:6])
-  # calculate all state-dependent probabilities
+  Gamma = tpm(par[1:2]) # rowwise softmax
+  delta = stationary(Gamma) # stationary distribution
+  mu = exp(par[3:4]) # state-dependent means
+  sigma = exp(par[5:6]) # state-dependent sds
+  # calculating all state-dependent probabilities
   allprobs = matrix(1, length(step), 2)
   ind = which(!is.na(step))
   for(j in 1:2) allprobs[ind,j] = dgamma2(step[ind], mu[j], sigma[j])
@@ -156,13 +156,14 @@ system.time(
   mod <- nlm(nll, par, step = trex$step)
 )
 #>    user  system elapsed 
-#>   0.365   0.009   0.376
+#>   0.369   0.012   0.382
 ```
 
 Really fast for 10.000 data points!
 
-After tranforming the unconstrained parameters to working parameters
-using `tpm()` and `stationary()`, we can visualise the results:
+After tranforming the working (unconstrained) parameters to natural
+parameters using `tpm()` and `stationary()`, we can visualise the
+results:
 
 ``` r
 # transform parameters to working

@@ -236,6 +236,14 @@ forward = function(delta, Gamma, allprobs,
 #' @import RTMB
 #'
 #' @examples
+#' ## Simple usage
+#' Gamma = array(c(0.9, 0.2, 0.1, 0.8), dim = c(2,2,10))
+#' delta = c(0.5, 0.5)
+#' allprobs = matrix(0.5, 10, 2)
+#' forward_g(delta, Gamma, allprobs)
+#' 
+#' \donttest{
+#' ## Full model fitting example
 #' ## negative log likelihood function
 #' nll = function(par, step, Z) {
 #'  # parameter transformations for unconstrained optimisation
@@ -253,11 +261,12 @@ forward = function(delta, Gamma, allprobs,
 #' }
 #' 
 #' ## fitting an HMM to the trex data
-#' par = c(-2,-2,            # initial tpm intercepts (logit-scale)
+#' par = c(-1.5,-1.5,        # initial tpm intercepts (logit-scale)
 #'         rep(0, 4),        # initial tpm slopes
 #'         log(c(0.3, 2.5)), # initial means for step length (log-transformed)
 #'         log(c(0.2, 1.5))) # initial sds for step length (log-transformed)
 #' mod = nlm(nll, par, step = trex$step[1:500], Z = trigBasisExp(trex$tod[1:500]))
+#' }
 forward_g = function(delta, Gamma, allprobs, 
                      trackID = NULL, ad = NULL, report = TRUE) {
   

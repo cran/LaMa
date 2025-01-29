@@ -51,7 +51,7 @@
 #' # initial parameter list
 #' par = list(logmu = log(c(0.3, 1)), # step mean
 #'            logsigma = log(c(0.2, 0.7)), # step sd
-#'            beta0 = c(-2,2), # state process intercept
+#'            beta0 = c(-2,-2), # state process intercept
 #'            betaspline = matrix(rep(0, 18), nrow = 2)) # state process spline coefs
 #'           
 #' # data object with initial penalty strength lambda
@@ -70,24 +70,47 @@
 #' # penalised negative log-likelihood function
 #' pnll = function(par) {
 #'   getAll(par, dat) # makes everything contained available without $
-#'   Gamma = tpm_g(Z, cbind(beta0, betaspline), ad = TRUE) # transition probabilities
-#'   delta = stationary_p(Gamma, t = 1, ad = TRUE) # initial distribution
+#'   Gamma = tpm_g(Z, cbind(beta0, betaspline)) # transition probabilities
+#'   delta = stationary_p(Gamma, t = 1) # initial distribution
 #'   mu = exp(logmu) # step mean
 #'   sigma = exp(logsigma) # step sd
 #'   # calculating all state-dependent densities
 #'   allprobs = matrix(1, nrow = length(step), ncol = N)
 #'   ind = which(!is.na(step)) # only for non-NA obs.
 #'   for(j in 1:N) allprobs[ind,j] = dgamma2(step[ind],mu[j],sigma[j])
-#'   -forward_g(delta, Gamma[,,tod], allprobs, ad = TRUE) +
+#'   -forward_g(delta, Gamma[,,tod], allprobs) +
 #'       penalty(betaspline, S, lambda) # this does all the penalization work
 #' }
 #'
 #' # model fitting
 #' mod = qreml(pnll, par, dat, random = "betaspline")
 penalty = function(re_coef, S, lambda) {
-  # getting the argname of the penalty strength parameter
-  # argname_lambda = as.character(substitute(lambda))
-  # RTMB::REPORT(argname_lambda) # Report the name of the penalty strength parameter
+  # Capture the argument name used in the call to `penalty`
+  # current_name <- as.character(substitute(lambda))
+  # 
+  # # Try to recover the original name by searching the parent frame
+  # recover_original_name <- function(value, env) {
+  #   # Search for all objects in the parent frame
+  #   all_objects <- ls(env)
+  #   for (obj in all_objects) {
+  #     # Check if the object matches the value of `lambda`
+  #     if (identical(get(obj, envir = env), value)) {
+  #       return(obj)  # Return the name of the matching object
+  #     }
+  #   }
+  #   NULL  # Return NULL if no match is found
+  # }
+  # 
+  # # Attempt to recover the original name
+  # original_name <- recover_original_name(lambda, parent.frame())
+  # if (!is.null(original_name)) {
+  #   argname_lambda <- original_name
+  # } else {
+  #   argname_lambda <- current_name
+  # }
+  # 
+  # # Store the recovered name in the penalty metadata environment
+  # assign("argname_lambda", argname_lambda, envir = penalty_metadata)
   
   # Convert re_coef to a list of matrices (even if originally a vector)
   if (!is.list(re_coef)) {
@@ -95,7 +118,7 @@ penalty = function(re_coef, S, lambda) {
   }
   
   re_coef = lapply(re_coef, function(x) {
-    if (is.vector(x)) {
+    if (is.null(dim(x))) {
       matrix(x, nrow = 1)  # Convert vectors to 1-row matrices
     } else {
       x  # Leave matrices unchanged
@@ -105,13 +128,6 @@ penalty = function(re_coef, S, lambda) {
   # Get number of distinct random effects (of the same structure)
   n_re = length(re_coef)
   
-  # Get the number of similar random effects for each distinct random effect
-  re_lengths = sapply(re_coef, nrow)  # All elements are matrices now
-  
-  # Precompute start and end indices for lambda
-  end = cumsum(re_lengths)
-  start = c(1, end[-length(end)] + 1)
-  
   # Ensure S is a list of length n_re, replicating it if necessary
   if (!is.list(S)) {
     S = list(S)
@@ -120,6 +136,24 @@ penalty = function(re_coef, S, lambda) {
     S = rep(S, n_re)
   }
   
+  # transpose if necessary to match S
+  re_coef <- lapply(seq_len(n_re), function(i) {
+    if (ncol(re_coef[[i]]) != nrow(S[[i]])) {
+      t(re_coef[[i]])
+    } else if (nrow(re_coef[[i]]) != nrow(S[[i]])) {
+      re_coef[[i]]
+    } else{
+      stop("The coefficient structure does not match the provided penalty matrices.")
+    }
+  })
+  
+  # Get the number of similar random effects for each distinct random effect
+  re_lengths = sapply(re_coef, nrow)  # All elements are matrices now
+  
+  # Precompute start and end indices for lambda
+  end = cumsum(re_lengths)
+  start = c(1, end[-length(end)] + 1)
+  
   RTMB::REPORT(S) # Report penalty matrix list
   
   # Initialize penalty variables
@@ -127,9 +161,9 @@ penalty = function(re_coef, S, lambda) {
   pen = 0
   
   # check if re_coef and S match
-  if(any(sapply(re_coef, ncol) != sapply(S, nrow))){
-    stop("The coefficient structure does not match the provided penalty matrices.\n Are the coefficients arranged by row?")
-  }
+  # if(any(sapply(re_coef, ncol) != sapply(S, nrow))){
+  #   stop("The coefficient structure does not match the provided penalty matrices.\n Are the coefficients arranged by row?")
+  # }
   
   # Loop over distinct random effects - each now a matrix
   for (i in 1:n_re) {
@@ -170,13 +204,14 @@ penalty = function(re_coef, S, lambda) {
 #' The random effects/ spline coefficients can be vectors or matrices, the latter summarising several random effects of the same structure, each one being a row in the matrix.
 #' @param dat initial data list that contains the data used in the likelihood function, hyperparameters, and the \strong{initial penalty strength} vector
 #'
-#' If the initial penalty strength vector is \strong{not} called \code{lambda}, the name it has in \code{dat} needs to be specified using the \code{penalty} argument below.
+#' If the initial penalty strength vector is \strong{not} called \code{lambda}, the name it has in \code{dat} needs to be specified using the \code{psname} argument below.
 #' Its length needs to match the to the total number of random effects.
 #' @param random vector of names of the random effects/ penalised parameters in \code{par}
 #' 
 #' \strong{Caution:} The ordering of \code{random} needs to match the order of the random effects passed to \code{\link{penalty}} inside the likelihood function.
+#' @param map optional map for fixed effects in the likelihood function
 #' @param psname optional name given to the penalty strength parameter in \code{dat}. Defaults to \code{"lambda"}.
-#' @param alpha optional hyperparamater for exponential smoothing of the penalty strengths
+#' @param alpha optional hyperparamater for exponential smoothing of the penalty strengths.
 #'
 #' For larger values smoother convergence is to be expected but the algorithm may need more iterations.
 #' @param smoothing optional scaling factor for the final penalty strength parameters
@@ -188,8 +223,9 @@ penalty = function(re_coef, S, lambda) {
 #' 
 #' We advise against changing the default values of \code{reltol} and \code{maxit} as this can decrease the accuracy of the Laplace approximation.
 #' @param silent integer silencing level: 0 corresponds to full printing of inner and outer iterations, 1 to printing of outer iterations only, and 2 to no printing.
-#' @param joint_unc logical, if \code{TRUE}, joint RTMB object is returned allowing for joint uncertainty quantification
+#' @param joint_unc logical, if \code{TRUE}, joint \code{RTMB} object is returned allowing for joint uncertainty quantification
 #' @param saveall logical, if \code{TRUE}, then all model objects from each iteration are saved in the final model object.
+#' @param epsilon vector of two values specifying the cycling detection parameters. If the relative change of the new penalty strength to the previous one is larger than \code{epsilon[1]} but the change to the one before is smaller than \code{epsilon[2]}, the algorithm will average the two last values to prevent cycling.
 #'
 #' @return returns a model list influenced by the users report statements in \code{pnll}
 #' @export
@@ -202,7 +238,7 @@ penalty = function(re_coef, S, lambda) {
 #' # initial parameter list
 #' par = list(logmu = log(c(0.3, 1)), # step mean
 #'            logsigma = log(c(0.2, 0.7)), # step sd
-#'            beta0 = c(-2,2), # state process intercept
+#'            beta0 = c(-2,-2), # state process intercept
 #'            betaspline = matrix(rep(0, 18), nrow = 2)) # state process spline coefs
 #'           
 #' # data object with initial penalty strength lambda
@@ -229,7 +265,7 @@ penalty = function(re_coef, S, lambda) {
 #'   allprobs = matrix(1, nrow = length(step), ncol = N)
 #'   ind = which(!is.na(step)) # only for non-NA obs.
 #'   for(j in 1:N) allprobs[ind,j] = dgamma2(step[ind],mu[j],sigma[j])
-#'   -forward_g(delta, Gamma[,,tod], allprobs, ad = TRUE) +
+#'   -forward_g(delta, Gamma[,,tod], allprobs) +
 #'       penalty(betaspline, S, lambda) # this does all the penalization work
 #' }
 #'
@@ -239,23 +275,22 @@ qreml = function(pnll, # penalized negative log-likelihood function
                  par, # initial parameter list
                  dat, # initial dat object, currently needs to be called dat!
                  random, # names of parameters in par that are random effects/ penalized
+                 map = NULL, # map for fixed effects
                  psname = "lambda", # name given to the psname parameter in dat
-                 alpha = 0, # exponential smoothing parameter
+                 alpha = 0.15, # exponential smoothing parameter
                  smoothing = 1,
                  maxiter = 100, # maximum number of iterations
                  tol = 1e-4, # tolerance for convergence
                  control = list(reltol = 1e-10, maxit = 1000), # control list for inner optimization
                  silent = 1, # print level
                  joint_unc = TRUE, # should joint object be returned?
-                 saveall = FALSE) # save all intermediate models?
+                 saveall = FALSE, # save all intermediate models?
+                 epsilon = c(1e-2, 1e-1)) # cycling detection parameters 
 {
   
   # setting the argument name for par because later updated par is returned
   argname_par = as.character(substitute(par))
   argname_dat = as.character(substitute(dat))
-  
-  # setting the environment for mllk to be the local environment such that it pull the right lambda
-  # environment(pnll) = environment() 
   
   # number of random effects, each one can be a matrix where each row is a random effect, but then they have the same penalty structure
   n_re = length(random) 
@@ -263,28 +298,22 @@ qreml = function(pnll, # penalized negative log-likelihood function
   # list to save all model objects
   allmods = list() 
   
-  # if name of penalty strength parameter is not specified, determine automatically
-  # if(is.null(penalty)){
-  #   # create inital obj to run reporting and get the argname of lambda
-  #   assign(argname_dat, dat, envir = environment())
-  #   obj_ini = MakeADFun(pnll, par)
-  #   report_ini = obj_ini$report()
-  #   penalty = report_ini$argname_lambda
-  # }
-  
   # initial lambda locally
-  lambda = dat[[psname]]
-  
-  # experimentally, changing the name of the data object in pnll to dat
-  # if(argname_dat != "dat"){
-  #   body(pnll) <- parse(text=gsub(argname_dat, "dat", deparse(body(pnll))))
+  # Define a global environment to store the captured names
+  # penalty_metadata <- new.env(parent = emptyenv())
+  # if(is.null(psname)){
+  #   pnll(par) # call once to get the name of the lambda parameter
+  #   psname = get("argname_lambda", envir = penalty_metadata)
   # }
+  
+  lambda = dat[[psname]]
   
   # creating the objective function as wrapper around pnll to pull lambda from local
   f = function(par){
     environment(pnll) = environment()
     
-    "[<-" <- ADoverload("[<-") # overloading assignment operators, currently necessary
+    # overloading assignment operators, currently necessary
+    "[<-" <- ADoverload("[<-")
     "c" <- ADoverload("c")
     "diag<-" <- ADoverload("diag<-")
     
@@ -299,9 +328,25 @@ qreml = function(pnll, # penalized negative log-likelihood function
   }
   
   # creating the RTMB objective function
-  if(silent %in% 0:1) cat("Creating AD function\n")
+  if(silent %in% 0:1){
+    cat("Creating AD function\n")
+  } 
   
-  obj = MakeADFun(func = f, parameters = par, silent = TRUE) # silent and replacing with own prints
+  if(!is.null(map)){
+    # check that no random effects are fixed
+    if(any(names(map) %in% random)){
+      msg <- "'map' cannot contain random effects or spline parameters"
+      stop(msg)
+    }
+    # make factor
+    map = lapply(map, factor)
+  }
+  
+  obj = MakeADFun(func = f, 
+                  parameters = par, 
+                  silent = TRUE,
+                  map = map) # silent and replacing with own prints
+  
   newpar = obj$par # saving initial parameter value as vector to initialize optimization in loop
   
   # own printing of maximum gradient component if silent = 0
@@ -322,15 +367,33 @@ qreml = function(pnll, # penalized negative log-likelihood function
   
   # finding the indices of the random effects to later index Hessian
   re_inds = list() 
-  for(i in 1:n_re){
-    re_dim = dim(as.matrix(par[[random[i]]]))
+  for(i in seq_len(n_re)){
+    if(is.vector(par[[random[i]]])){
+      re_dim = c(1, length(par[[random[i]]]))
+    } else if(is.matrix(par[[random[i]]])){
+      re_dim = dim(par[[random[i]]])
+    } else{
+      stop(paste0(random[i], " must be a vector or matrix"))
+    }
+    
+    byrow = FALSE
+    if(re_dim[1] == nrow(S[[i]])){
+      byrow = TRUE
+    }
+    #re_dim = dim(as.matrix(par[[random[i]]]))
+    
+    # which(re_dim == nrow(S[[i]])) - 1
+    
     # if(re_dim[2] == S_dims[i]){
     #   byrow = FALSE
     # } else{
     #   byrow = TRUE
     # }
-    re_inds[[i]] = matrix(which(names(obj$par) == random[i]), nrow = re_dim[1], ncol = re_dim[2])# , byrow = byrow)
-    if(dim(re_inds[[i]])[2] == 1) re_inds[[i]] = t(re_inds[[i]]) # if only one column, then transpose
+    re_inds[[i]] = matrix(which(names(obj$par) == random[i]), nrow = re_dim[1], ncol = re_dim[2])#, byrow = byrow)
+    if(byrow) {
+      re_inds[[i]] = t(re_inds[[i]]) # if byrow, then transpose
+    }
+    # if(dim(re_inds[[i]])[2] == 1) re_inds[[i]] = t(re_inds[[i]]) # if only one column, then transpose
   }
   
   # get number of similar random effects for each distinct random effect (of same structure)
@@ -341,7 +404,7 @@ qreml = function(pnll, # penalized negative log-likelihood function
   Lambdas[[1]] = reshape_lambda(re_lengths, lambda) # reshaping to match structure of random effects
   
   if(silent < 2){
-    cat("Initializing with", paste0(psname, ":"), round(lambda, 3), "\n")
+    cat("Initialising with", paste0(psname, ":"), round(lambda, 3), "\n")
   }
   
   # computing rank deficiency for each penalty matrix to use in correction term
@@ -349,6 +412,9 @@ qreml = function(pnll, # penalized negative log-likelihood function
   for(i in seq_len(length(m))) {
     m[i] = nrow(S[[i]]) - Matrix::rankMatrix(S[[i]])
   } 
+  
+  # initialising convergence check index (initially for all lambdas)
+  convInd <- seq_along(unlist(Lambdas[[1]]))
   
   ### updating algorithm
   # loop over outer iterations until convergence or maxiter
@@ -358,7 +424,6 @@ qreml = function(pnll, # penalized negative log-likelihood function
     opt = stats::optim(newpar, obj$fn, newgrad, 
                        method = "BFGS", hessian = TRUE, # return hessian in the end
                        control = control)
-
     
     # setting new optimum par for next iteration
     newpar = opt$par 
@@ -398,13 +463,24 @@ qreml = function(pnll, # penalized negative log-likelihood function
         
         # potentially smoothing new lambda
         lambdas_k[[i]][j] = (1-alpha) * lambda_new + alpha * Lambdas[[k]][[i]][j]
+        
+        # check for cycling behaviour
+        if(k > 2){
+          if(abs((lambdas_k[[i]][j] - Lambdas[[k-1]][[i]][j]) / Lambdas[[k-1]][[i]][j]) < epsilon[1] & # change to lambda_t-2 is small
+             abs((lambdas_k[[i]][j] - Lambdas[[k]][[i]][j]) / Lambdas[[k]][[i]][j]) > epsilon[2]) # but change to lambda_t-1 is large
+          {
+            cat("Cycling detected - averaging for faster convergence\n")
+            # replacing with mean to prevent cycling
+            lambdas_k[[i]][j] = (lambdas_k[[i]][j] + Lambdas[[k]][[i]][j]) / 2 
+          }
+        }
       }
       
       # minimum of zero for penalty strengths
       lambdas_k[[i]][which(lambdas_k[[i]] < 0)] = 0
       
       # maximum size of penalty strength
-      lambdas_k[[i]][which(lambdas_k[[i]] > 1e7)] = 1e7
+      # lambdas_k[[i]][which(lambdas_k[[i]] > 1e7)] = 1e7
     }
     
     # assigning new lambda to global list
@@ -413,13 +489,28 @@ qreml = function(pnll, # penalized negative log-likelihood function
     # updating lambda vector locally for next iteration
     lambda = unlist(lambdas_k) 
     
+    # old length of convergence check indices
+    oldlength <- length(convInd)
+    
+    if(k > 2){ # after 2 iterations, check whether any lambda > 1e5 and exclude from check
+      convInd = which(lambda <= 1e5)
+    }
+    
     if(silent < 2){
       cat("outer", k, "-", paste0(psname, ":"), round(lambda, 3), "\n")
+      
+      # print only if something changes
+      if(length(convInd) != oldlength & length(seq_along(lambda)[-convInd]) > 0){
+        cat(psname, seq_along(lambda)[-convInd], "excluded from convergence check (> 1e5)", "\n")
+      }
     }
     
     # convergence check
     # if(all(abs(lambda - unlist(Lambdas[[k]])) / unlist(Lambdas[[k]])) < tol)){
-    if(max(abs(lambda - unlist(Lambdas[[k]])) / unlist(Lambdas[[k]])) < tol){
+    if(max(abs(
+      (lambda - unlist(Lambdas[[k]]))[convInd] / unlist(Lambdas[[k]])[convInd]
+    )) < tol){
+      
       if(silent < 2){
         cat("Converged\n")
       }
@@ -486,9 +577,12 @@ qreml = function(pnll, # penalized negative log-likelihood function
   dat[[psname]] = lambda
   
   # format parameter to list
-  skeleton = utils::as.relistable(par)
-  parlist = utils::relist(opt$par, skeleton)
+  # skeleton = utils::as.relistable(par)
+  # parlist = utils::relist(opt$par, skeleton)
+  parlist = obj$env$parList(opt$par)
   mod[[argname_par]] = parlist # and assing to return object
+  
+  mod[[paste0("relist_", argname_par)]] = obj$env$parList
   
   # assign estimated parameter as vector
   mod[[paste0(argname_par, "_vec")]] = opt$par
@@ -508,7 +602,8 @@ qreml = function(pnll, # penalized negative log-likelihood function
   }
   
   # number of fixed parameters
-  mod$n_fixpar = length(unlist(par[!(names(par) %in% random)]))
+  # mod$n_fixpar = length(unlist(par[!(names(par) %in% random)]))
+  mod$n_fixpar = length(opt$par)
   
   # assing conditinoal Hessian
   mod$Hessian_conditional = J
@@ -535,7 +630,8 @@ qreml = function(pnll, # penalized negative log-likelihood function
       
       environment(pnll) = environment()
       
-      "[<-" <- ADoverload("[<-") # overloading assignment operators, currently necessary
+      # overloading assignment operators, currently necessary
+      "[<-" <- ADoverload("[<-") 
       "c" <- ADoverload("c")
       "diag<-" <- ADoverload("diag<-")
       
@@ -571,6 +667,8 @@ qreml = function(pnll, # penalized negative log-likelihood function
     mod$obj_joint = obj_joint
   }
   
+  class(mod) = "qreml model"
   return(mod)
 }
+
 

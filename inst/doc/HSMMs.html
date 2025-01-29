@@ -494,7 +494,7 @@ distributions is covered.</p>
 <span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a>  mod <span class="ot">&lt;-</span> <span class="fu">nlm</span>(nll, par, <span class="at">x =</span> x, <span class="at">N =</span> <span class="dv">3</span>, <span class="at">agsizes =</span> agsizes, <span class="at">stepmax =</span> <span class="dv">2</span>)</span>
 <span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a>)</span>
 <span id="cb5-11"><a href="#cb5-11" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb5-12"><a href="#cb5-12" tabindex="-1"></a><span class="co">#&gt;   0.455   0.006   0.462</span></span></code></pre></div>
+<span id="cb5-12"><a href="#cb5-12" tabindex="-1"></a><span class="co">#&gt;   0.449   0.001   0.450</span></span></code></pre></div>
 <p>Fitting HSMMs is rather slow (even using C++) as we translate the
 additional model complexity into a higher computational overhead (31
 states here).</p>
@@ -525,13 +525,13 @@ analysed by <span class="citation">Pohle, Adam, and Beumer (<a href="#ref-pohle2
 <div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="fu">library</span>(PHSMM)</span>
 <span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a>data <span class="ot">=</span> muskox[<span class="dv">1</span><span class="sc">:</span><span class="dv">1000</span>, ] <span class="co"># only using first 1000 observations for speed</span></span>
 <span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a><span class="fu">head</span>(data)</span>
-<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a><span class="co">#&gt;             date tday        x       y       step</span></span>
-<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a><span class="co">#&gt; 88273 2013-10-12   15 513299.2 8264867  17.998874</span></span>
-<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a><span class="co">#&gt; 88274 2013-10-12   16 513283.4 8264875   8.214733</span></span>
-<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a><span class="co">#&gt; 88275 2013-10-12   17 513284.3 8264883   7.205098</span></span>
-<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a><span class="co">#&gt; 88276 2013-10-12   18 513280.4 8264877  53.378332</span></span>
-<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a><span class="co">#&gt; 88277 2013-10-12   19 513252.0 8264922 719.242687</span></span>
-<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a><span class="co">#&gt; 88278 2013-10-12   20 513386.7 8265629  10.797127</span></span></code></pre></div>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a><span class="co">#&gt;                      date tday        x       y       step</span></span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a><span class="co">#&gt; 88273 2013-10-11 22:00:00   15 513299.2 8264867  17.998874</span></span>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a><span class="co">#&gt; 88274 2013-10-11 22:00:00   16 513283.4 8264875   8.214733</span></span>
+<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a><span class="co">#&gt; 88275 2013-10-11 22:00:00   17 513284.3 8264883   7.205098</span></span>
+<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a><span class="co">#&gt; 88276 2013-10-11 22:00:00   18 513280.4 8264877  53.378332</span></span>
+<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a><span class="co">#&gt; 88277 2013-10-11 22:00:00   19 513252.0 8264922 719.242687</span></span>
+<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a><span class="co">#&gt; 88278 2013-10-11 22:00:00   20 513386.7 8265629  10.797127</span></span></code></pre></div>
 <p>As these data have already been preprossed, we can immediately write
 the negative log-likelihood function. When modeling the dwell-time
 distribution of real processes, it is typically advisable to use a more
@@ -576,7 +576,7 @@ interpretability using <code>dgamma2()</code>.</p>
 <span id="cb9-11"><a href="#cb9-11" tabindex="-1"></a>                    <span class="at">agsizes =</span> agsizes, <span class="at">iterlim =</span> <span class="dv">500</span>)</span>
 <span id="cb9-12"><a href="#cb9-12" tabindex="-1"></a>)</span>
 <span id="cb9-13"><a href="#cb9-13" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb9-14"><a href="#cb9-14" tabindex="-1"></a><span class="co">#&gt;   2.351   0.019   2.371</span></span></code></pre></div>
+<span id="cb9-14"><a href="#cb9-14" tabindex="-1"></a><span class="co">#&gt;   2.407   0.018   2.434</span></span></code></pre></div>
 </div>
 <div id="results-1" class="section level3">
 <h3>Results</h3>

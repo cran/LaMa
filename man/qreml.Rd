@@ -9,15 +9,17 @@ qreml(
   par,
   dat,
   random,
+  map = NULL,
   psname = "lambda",
-  alpha = 0,
+  alpha = 0.15,
   smoothing = 1,
   maxiter = 100,
   tol = 1e-04,
   control = list(reltol = 1e-10, maxit = 1000),
   silent = 1,
   joint_unc = TRUE,
-  saveall = FALSE
+  saveall = FALSE,
+  epsilon = c(0.01, 0.1)
 )
 }
 \arguments{
@@ -31,16 +33,18 @@ The random effects/ spline coefficients can be vectors or matrices, the latter s
 
 \item{dat}{initial data list that contains the data used in the likelihood function, hyperparameters, and the \strong{initial penalty strength} vector
 
-If the initial penalty strength vector is \strong{not} called \code{lambda}, the name it has in \code{dat} needs to be specified using the \code{penalty} argument below.
+If the initial penalty strength vector is \strong{not} called \code{lambda}, the name it has in \code{dat} needs to be specified using the \code{psname} argument below.
 Its length needs to match the to the total number of random effects.}
 
 \item{random}{vector of names of the random effects/ penalised parameters in \code{par}
 
 \strong{Caution:} The ordering of \code{random} needs to match the order of the random effects passed to \code{\link{penalty}} inside the likelihood function.}
 
+\item{map}{optional map for fixed effects in the likelihood function}
+
 \item{psname}{optional name given to the penalty strength parameter in \code{dat}. Defaults to \code{"lambda"}.}
 
-\item{alpha}{optional hyperparamater for exponential smoothing of the penalty strengths
+\item{alpha}{optional hyperparamater for exponential smoothing of the penalty strengths.
 
 For larger values smoother convergence is to be expected but the algorithm may need more iterations.}
 
@@ -58,9 +62,11 @@ We advise against changing the default values of \code{reltol} and \code{maxit} 
 
 \item{silent}{integer silencing level: 0 corresponds to full printing of inner and outer iterations, 1 to printing of outer iterations only, and 2 to no printing.}
 
-\item{joint_unc}{logical, if \code{TRUE}, joint RTMB object is returned allowing for joint uncertainty quantification}
+\item{joint_unc}{logical, if \code{TRUE}, joint \code{RTMB} object is returned allowing for joint uncertainty quantification}
 
 \item{saveall}{logical, if \code{TRUE}, then all model objects from each iteration are saved in the final model object.}
+
+\item{epsilon}{vector of two values specifying the cycling detection parameters. If the relative change of the new penalty strength to the previous one is larger than \code{epsilon[1]} but the change to the one before is smaller than \code{epsilon[2]}, the algorithm will average the two last values to prevent cycling.}
 }
 \value{
 returns a model list influenced by the users report statements in \code{pnll}
@@ -81,7 +87,7 @@ data = trex[1:1000,] # subset
 # initial parameter list
 par = list(logmu = log(c(0.3, 1)), # step mean
            logsigma = log(c(0.2, 0.7)), # step sd
-           beta0 = c(-2,2), # state process intercept
+           beta0 = c(-2,-2), # state process intercept
            betaspline = matrix(rep(0, 18), nrow = 2)) # state process spline coefs
           
 # data object with initial penalty strength lambda
@@ -108,7 +114,7 @@ pnll = function(par) {
   allprobs = matrix(1, nrow = length(step), ncol = N)
   ind = which(!is.na(step)) # only for non-NA obs.
   for(j in 1:N) allprobs[ind,j] = dgamma2(step[ind],mu[j],sigma[j])
-  -forward_g(delta, Gamma[,,tod], allprobs, ad = TRUE) +
+  -forward_g(delta, Gamma[,,tod], allprobs) +
       penalty(betaspline, S, lambda) # this does all the penalization work
 }
 

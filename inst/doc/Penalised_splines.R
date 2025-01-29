@@ -71,10 +71,10 @@ system.time(
 )
 
 ## ----results qreml, fig.width = 9, fig.height = 5-----------------------------
-Gamma = mod1$Gamma
+# Gamma = mod1$Gamma
 Delta = mod1$Delta
 
-tod_seq = seq(0,24, length = 200)
+tod_seq = seq(0, 24, length = 100)
 Z_pred = pred_matrix(modmat, data.frame(tod = tod_seq))
 
 Gamma_plot = tpm_g(Z_pred, mod1$beta) # interpolating transition probs
@@ -87,7 +87,6 @@ legend("topleft", lwd = 2, lty = c(1,3), bty = "n",
 plot(Delta[,2], type = "b", lwd = 2, pch = 16, xlab = "time of day", ylab = "Pr(active)", 
      col = "deepskyblue", bty = "n", xaxt = "n")
 axis(1, at = seq(0,24,by=4), labels = seq(0,24,by=4))
-
 
 ## ----shark_data, fig.width = 9, fig.height = 5--------------------------------
 head(nessi)
