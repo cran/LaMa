@@ -502,7 +502,7 @@ matrix from an unconstrained parameter vector and
 <span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a>  mod <span class="ot">&lt;-</span> <span class="fu">nlm</span>(nll, par, <span class="at">timediff =</span> timediff, <span class="at">x =</span> x, <span class="at">N =</span> <span class="dv">2</span>)</span>
 <span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a>)</span>
 <span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a><span class="co">#&gt;   0.081   0.001   0.082</span></span></code></pre></div>
+<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a><span class="co">#&gt;   0.085   0.001   0.087</span></span></code></pre></div>
 </div>
 <div id="results" class="section level3">
 <h3>Results</h3>
@@ -515,9 +515,9 @@ matrix from an unconstrained parameter vector and
 <span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a><span class="co">#&gt; [1] 2 5</span></span>
 <span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a>Q <span class="ot">=</span> <span class="fu">generator</span>(mod<span class="sc">$</span>estimate[<span class="dv">2</span><span class="sc">*</span>N<span class="sc">+</span><span class="dv">1</span><span class="sc">:</span>(N<span class="sc">*</span>(N<span class="dv">-1</span>))])</span>
 <span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a><span class="fu">round</span>(Q,<span class="dv">3</span>)</span>
-<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a><span class="co">#&gt;        [,1]   [,2]</span></span>
-<span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a><span class="co">#&gt; [1,] -0.479  0.479</span></span>
-<span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a><span class="co">#&gt; [2,]  0.905 -0.905</span></span></code></pre></div>
+<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a><span class="co">#&gt;        S1     S2</span></span>
+<span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a><span class="co">#&gt; S1 -0.479  0.479</span></span>
+<span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a><span class="co">#&gt; S2  0.905 -0.905</span></span></code></pre></div>
 </div>
 </div>
 <div id="example-2-three-states" class="section level2">
@@ -571,7 +571,7 @@ state to transition to, as explained in the beginning.</p>
 <span id="cb10-8"><a href="#cb10-8" tabindex="-1"></a>  mod2 <span class="ot">&lt;-</span> <span class="fu">nlm</span>(nll, par, <span class="at">timediff =</span> timediff, <span class="at">x =</span> x, <span class="at">N =</span> <span class="dv">3</span>, <span class="at">stepmax =</span> <span class="dv">10</span>)</span>
 <span id="cb10-9"><a href="#cb10-9" tabindex="-1"></a>)</span>
 <span id="cb10-10"><a href="#cb10-10" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb10-11"><a href="#cb10-11" tabindex="-1"></a><span class="co">#&gt;   0.338   0.008   0.347</span></span>
+<span id="cb10-11"><a href="#cb10-11" tabindex="-1"></a><span class="co">#&gt;   0.354   0.007   0.362</span></span>
 <span id="cb10-12"><a href="#cb10-12" tabindex="-1"></a><span class="co"># without restricting stepmax, we run into numerical problems</span></span></code></pre></div>
 </div>
 <div id="results-1" class="section level3">
@@ -585,10 +585,10 @@ state to transition to, as explained in the beginning.</p>
 <span id="cb11-7"><a href="#cb11-7" tabindex="-1"></a><span class="co">#&gt; [1] 1.80 2.58 5.06</span></span>
 <span id="cb11-8"><a href="#cb11-8" tabindex="-1"></a>Q <span class="ot">=</span> <span class="fu">generator</span>(mod2<span class="sc">$</span>estimate[<span class="dv">2</span><span class="sc">*</span>N<span class="sc">+</span><span class="dv">1</span><span class="sc">:</span>(N<span class="sc">*</span>(N<span class="dv">-1</span>))])</span>
 <span id="cb11-9"><a href="#cb11-9" tabindex="-1"></a><span class="fu">round</span>(Q, <span class="dv">3</span>)</span>
-<span id="cb11-10"><a href="#cb11-10" tabindex="-1"></a><span class="co">#&gt;        [,1]   [,2]   [,3]</span></span>
-<span id="cb11-11"><a href="#cb11-11" tabindex="-1"></a><span class="co">#&gt; [1,] -0.888  0.565  0.323</span></span>
-<span id="cb11-12"><a href="#cb11-12" tabindex="-1"></a><span class="co">#&gt; [2,]  2.821 -3.469  0.647</span></span>
-<span id="cb11-13"><a href="#cb11-13" tabindex="-1"></a><span class="co">#&gt; [3,]  0.000  0.770 -0.770</span></span></code></pre></div>
+<span id="cb11-10"><a href="#cb11-10" tabindex="-1"></a><span class="co">#&gt;        S1     S2     S3</span></span>
+<span id="cb11-11"><a href="#cb11-11" tabindex="-1"></a><span class="co">#&gt; S1 -0.888  0.565  0.323</span></span>
+<span id="cb11-12"><a href="#cb11-12" tabindex="-1"></a><span class="co">#&gt; S2  2.821 -3.469  0.647</span></span>
+<span id="cb11-13"><a href="#cb11-13" tabindex="-1"></a><span class="co">#&gt; S3  0.000  0.770 -0.770</span></span></code></pre></div>
 </div>
 </div>
 <div id="references" class="section level2 unnumbered">

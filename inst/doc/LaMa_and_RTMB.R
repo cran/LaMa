@@ -8,8 +8,7 @@ knitr::opts_chunk$set(
 )
 
 ## ----setup--------------------------------------------------------------------
-library(LaMa) # development version
-library(RTMB)
+library(LaMa)
 
 ## ----data---------------------------------------------------------------------
 head(trex, 5)
@@ -140,8 +139,12 @@ curve(dnorm(x, 0, 1), lwd = 2, add = T, lty = 2)
 par(oldpar)
 
 ## ----tod----------------------------------------------------------------------
-# building trigonometric basis desing matrix (in this case no intercept column)
-Z = trigBasisExp(1:24, degree = 2) # convenience function from LaMa
+Z = cosinor(1:24, period = c(24, 12))
+
+modmat = make_matrices(~ cosinor(tod, period = c(24, 12)), 
+                       data = data.frame(tod = 1:24))
+Z = modmat$Z
+
 # only compute the 24 unique values and index later for entire time series
 dat$Z = Z # adding design matrix to dat
 dat$tod = trex$tod # adding time of day to dat for indexing
@@ -151,7 +154,7 @@ par = list(logmu = log(c(0.3, 1)),
            logsigma = log(c(0.2, 0.7)),
            logkappa = log(c(0.2, 0.7)),
            beta = matrix(c(rep(-2, 2), 
-                           rep(0, 2*ncol(Z))), nrow = 2)) # 2 times 4+1 matrix
+                           rep(0, 2*4)), nrow = 2)) # 2 times 4+1 matrix
 # replacing eta with regression parameter matrix, initializing slopes at zero
 
 ## ----mllk2--------------------------------------------------------------------
@@ -160,7 +163,7 @@ nll2 = function(par) {
   Gamma = tpm_g(Z, beta) # covariate-dependent tpms (in this case only 24 unique)
   # tpm_g() automatically checks if intercept column is included
   ADREPORT(Gamma) # adreporting
-  Delta = stationary_p(Gamma) # periodically stationary distribution
+  Delta = stationary_p(Gamma) # all periodically stationary distributions
   ADREPORT(Delta)
   delta = Delta[tod[1],] # initial periodically stationary distribution
   # exponentiating because all parameters strictly positive
@@ -178,7 +181,7 @@ nll2 = function(par) {
 
 ## ----modelfit2----------------------------------------------------------------
 obj2 = MakeADFun(nll2, par, silent = TRUE) # creating the objective function
-opt2 = nlminb(obj2$par, obj2$fn, obj2$gr) # optimization
+opt2 = nlminb(obj2$par, obj2$fn, obj2$gr) # optimisation
 
 ## ----MLE2, fig.width = 8, fig.height = 5--------------------------------------
 mod2 = obj2$report()

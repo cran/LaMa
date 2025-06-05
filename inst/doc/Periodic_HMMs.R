@@ -98,3 +98,23 @@ plot(Delta_hat[,1], type = "b", lwd = 2, pch = 16, col = color[1], bty = "n",
      xlab = "time of day", ylab = "Pr(state 1)")
 par(oldpar)
 
+## ----cosinor------------------------------------------------------------------
+tod = 1:24 # cyclic time of day variable
+Z = cosinor(tod, period = c(24, 12)) # design matrix
+Z = cbind(intercept = 1, Z)
+head(Z, 2)
+
+## ----cosinor_form-------------------------------------------------------------
+data = data.frame(tod = rep(1:24, 2), 
+                  temp = rnorm(48, 20, 5))
+modmat = make_matrices(~ temp * cosinor(tod, 24), data)
+Z = modmat$Z
+head(Z, 2)
+
+## ----tpm----------------------------------------------------------------------
+# coefficient matrix
+(beta = matrix(c(-2,-2, runif(2*(ncol(Z)-1))), nrow = 2))
+# constructing t.p.m.s
+Gamma = tpm_p(Z = Z, beta = beta) # not first arguments in tpm_p
+Gamma = tpm_g(Z, beta) # but first arguments in tpm_g
+

@@ -11,7 +11,8 @@ forward_p(
   tod,
   trackID = NULL,
   ad = NULL,
-  report = TRUE
+  report = TRUE,
+  logspace = FALSE
 )
 }
 \arguments{
@@ -34,7 +35,13 @@ Instead of a single vector \code{delta} corresponding to the initial distributio
 
 \item{ad}{optional logical, indicating whether automatic differentiation with \code{RTMB} should be used. By default, the function determines this itself.}
 
-\item{report}{logical, indicating whether \code{delta}, \code{Gamma} and \code{allprobs} should be reported from the fitted model. Defaults to \code{TRUE}, but only works if \code{ad = TRUE}.}
+\item{report}{logical, indicating whether \code{delta}, \code{Gamma}, \code{allprobs}, and potentially \code{trackID} should be reported from the fitted model. 
+Defaults to \code{TRUE}, but only works if \code{ad = TRUE}, as it uses the \code{RTMB} package. 
+
+\strong{Caution:} When there are multiple tracks, for compatibility with downstream functions like \code{\link{viterbi_p}}, \code{\link{stateprobs_p}} or \code{\link{pseudo_res}}, 
+\code{forward_p} should only be called \strong{once} with a \code{trackID} argument.}
+
+\item{logspace}{logical, indicating whether the probabilities/ densities in the \code{allprobs} matrix are on log-scale. If so, internal computations are also done on log-scale which is numerically more robust when the entries are very small.}
 }
 \value{
 log-likelihood for given data and parameters

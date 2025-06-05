@@ -71,11 +71,10 @@ system.time(
 )
 
 ## ----results qreml, fig.width = 9, fig.height = 5-----------------------------
-# Gamma = mod1$Gamma
 Delta = mod1$Delta
 
 tod_seq = seq(0, 24, length = 100)
-Z_pred = pred_matrix(modmat, data.frame(tod = tod_seq))
+Z_pred = predict(modmat, data.frame(tod = tod_seq))
 
 Gamma_plot = tpm_g(Z_pred, mod1$beta) # interpolating transition probs
 
@@ -133,10 +132,12 @@ for(j in 1:3) curve(mod$delta[j] * dnorm(x, mod$mu[j], mod$sigma[j]),
 
 
 ## ----smooth prep--------------------------------------------------------------
-modmat = buildSmoothDens(nessi["logODBA"], # only one data stream here
-                         k = 25, # number of basis functions
-                         par = list(logODBA = list(mean = c(-4, -3.3, -2.8),
-                                                   sd = c(0.3, 0.2, 0.5))))
+# providing initial means and sds to initialise spline coefficients
+par0 = list(logODBA = list(mean = c(-4, -3.3, -2.8), sd = c(0.3, 0.2, 0.5)))
+
+# construct the smooth density objects
+modmat = smooth_dens_construct(nessi["logODBA"], # only one data stream here
+                               par = par0)
 
 # par is nested named list: top layer: each data stream
 # for each data stream: initial means and standard deviations for each state
@@ -169,7 +170,7 @@ pnll = function(par){
 }
 
 ## ----nessi_spline_fit---------------------------------------------------------
-par = list(beta = beta, # spline coefficients prepared by buildSmoothDens()
+par = list(beta = beta, # spline coefficients prepared by smooth_dens_construct()
            eta = rep(-2, 6)) # initial transition matrix on logit scale
 
 dat = list(N = 3, # number of states
@@ -240,9 +241,9 @@ system.time(
 
 ## ----energy_results, fig.width = 9, fig.height = 5----------------------------
 xseq = seq(min(energy$Oil), max(energy$Oil), length = 200) # sequence for prediction
-Z_pred = pred_matrix(modmat, newdata = data.frame(Oil = xseq)) # prediction design matrix
+Z_pred = predict(modmat, newdata = data.frame(Oil = xseq)) # prediction design matrix
 
-mod3$states = viterbi(mod3$delta, mod3$Gamma, mod3$allprobs) # decoding most probable state sequence
+energy$states = viterbi(mod = mod3) # decoding most probable state sequence
 
 Mu_plot = Z_pred %*% t(mod3$beta)
 Sigma_plot = exp(Z_pred %*% t(mod3$alpha))
@@ -252,7 +253,7 @@ library(scales) # to make colors semi-transparent
 par(mfrow = c(1,2))
 
 # state-dependent distribution as a function of oil price
-plot(energy$Oil, energy$Price, pch = 20, bty = "n", col = alpha(color[mod3$states], 0.1),
+plot(energy$Oil, energy$Price, pch = 20, bty = "n", col = alpha(color[energy$states], 0.1),
      xlab = "oil price", ylab = "energy price")
 for(j in 1:2) lines(xseq, Mu_plot[,j], col = color[j], lwd = 3) # means
 qseq = qnorm(seq(0.5, 0.95, length = 4)) # sequence of quantiles
@@ -267,6 +268,6 @@ plot(NA, xlim = c(0, nrow(energy)), ylim = c(1,10), bty = "n",
      xlab = "time", ylab = "energy price")
 segments(x0 = 1:(nrow(energy)-1), x1 = 2:nrow(energy),
          y0 = energy$Price[-nrow(energy)], y1 = energy$Price[-1], 
-         col = color[mod3$states[-1]], lwd = 0.5)
+         col = color[energy$states[-1]], lwd = 0.5)
 
 

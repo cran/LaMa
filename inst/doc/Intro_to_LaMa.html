@@ -416,9 +416,9 @@ elements. Each row can then be computed via the inverse multinomial
 logistic link (also known as softmax). This can be done using the
 function <code>tpm()</code>:</p>
 <div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a>(<span class="at">Gamma =</span> <span class="fu">tpm</span>(<span class="fu">c</span>(<span class="sc">-</span><span class="dv">2</span>, <span class="sc">-</span><span class="dv">3</span>))) <span class="co"># 2 states -&gt; 2*(1-2) = 2 off-diagonal entries</span></span>
-<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="co">#&gt;           [,1]       [,2]</span></span>
-<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a><span class="co">#&gt; [1,] 0.9525741 0.04742587</span></span>
-<span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a><span class="co">#&gt; [2,] 0.1192029 0.88079708</span></span></code></pre></div>
+<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="co">#&gt;           S1         S2</span></span>
+<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a><span class="co">#&gt; S1 0.9525741 0.04742587</span></span>
+<span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a><span class="co">#&gt; S2 0.1192029 0.88079708</span></span></code></pre></div>
 <p>For HMMs with such homogeneous transition probabilities, we often
 assume <strong>stationarity</strong> of the underlying Markov chain, as
 well-behaved Markov chains converge to a unique stationary distribution.
@@ -434,7 +434,7 @@ initial distribution <span class="math inline">\(\delta^{(1)}\)</span>
 by this stationary distribution. We can easily compute the stationary
 distribution associated with the above t.p.m. using</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a>(<span class="at">delta =</span> <span class="fu">stationary</span>(Gamma))</span>
-<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="co">#&gt;   state 1   state 2 </span></span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="co">#&gt;        S1        S2 </span></span>
 <span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a><span class="co">#&gt; 0.7153801 0.2846199</span></span></code></pre></div>
 <p>This stationary distribution can be interpreted as the log-run-time
 proportion of time spent in each state.</p>
@@ -553,7 +553,7 @@ e.g. <code>nlm()</code>.</p>
 <span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a>  mod <span class="ot">&lt;-</span> <span class="fu">nlm</span>(nll, par, <span class="at">x =</span> x)</span>
 <span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a>)</span>
 <span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a><span class="co">#&gt;   0.037   0.000   0.037</span></span></code></pre></div>
+<span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a><span class="co">#&gt;   0.038   0.000   0.038</span></span></code></pre></div>
 <p>We see that implementation of the forward algorithm in C++ leads to
 really fast estimation speeds.</p>
 </div>

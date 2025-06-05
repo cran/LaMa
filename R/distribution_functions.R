@@ -308,6 +308,85 @@ ddirichlet <- function(x, alpha, log = TRUE) {
 }
 
 
+
+#' Zero-inflated density constructer
+#' 
+#' @description 
+#' Constructs a zero-inflated density function from a given probability density function
+#' 
+#' @details
+#' The definition of zero-inflation is different for discrete and continuous distributions.
+#' For discrete distributions with p.m.f. \eqn{f} and zero-inflation probability \eqn{p}, we have
+#' \deqn{\Pr(X = 0) = p + (1 - p) \cdot f(0),} and
+#' \deqn{\Pr(X = x) = (1 - p) \cdot f(x), \quad x > 0.}
+#' 
+#' For continuous distributions with p.d.f. \eqn{f}, we have
+#' \deqn{f_{\text{zinfl}}(x) = p \cdot \delta_0(x) + (1 - p) \cdot f(x),}
+#' where \eqn{\delta_0} is the Dirac delta function at zero.
+#' 
+#' @param dist either a probability density function or a probability mass function
+#' @param discrete logical; if \code{TRUE}, the density for \code{x = 0} will be \code{zeroprob + (1-zeroprob) * dist(0, ...)}. Otherwise it will just be \code{zeroprob}.
+#' In standard cases, this will be determined automatically. For non-standard cases, set this to \code{TRUE} or \code{FALSE} depending on the type of \code{dist}. See details.
+#'
+#' @returns zero-inflated density function with first argument \code{x}, second argument \code{zeroprob}, and additional arguments \code{...} that will be passed to \code{dist}.
+#' @export
+#'
+#' @examples
+#' dzinorm <- zero_inflate(dnorm)
+#' dzinorm(c(NA, 0, 2), 0.5, mean = 1, sd = 1)
+#' 
+#' zipois <- zero_inflate(dpois)
+#' zipois(c(NA, 0, 1), 0.5, 1)
+zero_inflate <- function(dist, discrete = NULL) {
+  dist_name <- deparse(substitute(dist))
+  
+  # Auto-detect whether the function is discrete
+  discrete_dists <- c("dpois", "dbinom", "dnbinom", "dgeom", "dmultinom", "dhyper")
+  if (is.null(discrete)) {
+    discrete <- dist_name %in% discrete_dists
+  }
+  
+  # Extract function argument names, excluding `x`
+  dist_args <- setdiff(names(formals(dist)), "x")
+  
+  # Define core function logic for both discrete and continuous cases
+  core_function <- function(x, zeroprob, dist, discrete, dist_args, ...) {
+    "[<-" <- RTMB::ADoverload("[<-")  # Ensure correct assignment behavior
+    
+    args <- list(...)
+    
+    # Initialize output vector
+    out <- numeric(length(x))
+    
+    # Handle NA values properly
+    is_na <- is.na(x)
+    is_zero <- x == 0 & !is_na
+    is_nonzero <- x != 0 & !is_na  # Exclude NA and 0
+    
+    # Common logic: assign probability at zero
+    out[is_zero] <- zeroprob  
+    
+    if (discrete) {
+      # Logic for discrete distributions: Handle x = 0 case with dist(0)
+      out[is_zero] <- out[is_zero] + (1 - zeroprob) * do.call(dist, c(list(0), args))
+    }
+    
+    # Logic for non-zero values
+    out[is_nonzero] <- (1 - zeroprob) * do.call(dist, c(list(x[is_nonzero]), args))
+    
+    # Ensure NAs remain as NA
+    out[is_na] <- NA
+    
+    return(out)
+  }
+  
+  # Return function with core logic encapsulated
+  function(x, zeroprob, ...) {
+    core_function(x, zeroprob, dist, discrete, dist_args, ...)
+  }
+}
+
+
 #' Reparametrised multivariate Gaussian distribution
 #'
 #' Density function of the multivariate Gaussian distribution reparametrised in terms of its precision matrix (inverse variance).
@@ -373,4 +452,132 @@ dgmrf2 = function(x,
   } else{
     return(exp(logdens))
   }
+}
+
+
+
+#' State dwell-time distributions of periodically inhomogeneous Markov chains
+#' 
+#' @description
+#' Computes the dwell-time distribution of a periodically inhomogeneous Markov chain for a given transition probability matrix.
+#' 
+#' @details
+#' For Markov chains whose transition probabilities vary only periodically, which is achieved for example by
+#' expressing the transition probability matrix as a periodic function of the time of day using \code{\link{tpm_p}} or \code{\link{cosinor}}, the probability distribution of time spent in a state can be computed analytically.
+#' This function computes said distribution, either for a specific time point (conditioning on transitioning into the state at that time point) or for the overall distribution (conditioning on transitioning into the state at any time point).
+#'
+#' @references Koslik, J. O., Feldmann, C. C., Mews, S., Michels, R., & Langrock, R. (2023). Inference on the state process of periodically inhomogeneous hidden Markov models for animal behavior. arXiv preprint arXiv:2312.14583.
+#'
+#' @param x vector of (non-negative) dwell times to compute the dwell-time distribution for
+#' @param Gamma array of \code{L} unique transition probability matrices of a periodically inhomogeneous Markov chain, with dimensions \code{c(N,N,L)}, where \code{N} is the number of states and \code{L} is the cycle length
+#' @param time integer vector of time points in \code{1:L} at which to compute the dwell-time distribution. If \code{NULL}, the overall dwell-time distribution is computed.
+#' @param state integer vector of state indices for which to compute the dwell-time distribution. If \code{NULL}, dwell-time distributions for all states are returned in a named list.
+#'
+#' @return either time-varying dwell-time distribution(s) if \code{time} is specified, or overall dwell-time distribution if \code{time} is \code{NULL}. 
+#' If more than one \code{state} is specified, a named list over states is returned.
+#'
+#' @examples 
+#' # setting parameters for trigonometric link
+#' beta = matrix(c(-1, 2, -1, -2, 1, -1), nrow = 2, byrow = TRUE)
+#' Gamma = tpm_p(beta = beta, degree = 1)
+#' 
+#' # at specific times and for specific state
+#' ddwell(1:20, Gamma, time = 1:4, state = 1)
+#' # results in 4x20 matrix
+#' 
+#' # or overall distribution for all states
+#' ddwell(1:20, Gamma)
+#' # results in list of length 2, each element is a vector of length 20
+#' 
+#' @export
+ddwell <- function(
+    x, 
+    Gamma,
+    time = NULL,
+    state = NULL
+    ) {
+  
+  # check if x is a vector
+  if (!is.vector(x) | any(x < 0)) {
+    stop("'x' must be a vector of non-negative integers.")
+  }
+  
+  # check if Gamma is a 3D array
+  if (!is.array(Gamma) || length(dim(Gamma)) != 3 || dim(Gamma)[1] != dim(Gamma)[2]) {
+    stop("'Gamma' must be a 3D array with dimensions 'c(N, N, L)', where 'N' is the number of states and 'L' is the cycle length.")
+  }
+  
+  # assign dimensions
+  L <- dim(Gamma)[3] # cycle length
+  nStates <- dim(Gamma)[1] # number of states
+  
+  # check if state is NULL or a valid integer
+  if (is.null(state)) {
+    state <- seq_len(nStates) # compute for all states
+  } else if (!is.numeric(state) || any(state < 1) || any(state > nStates)) {
+    stop("'state' must be an integer vector in the range [1, N], where 'N' is the number of states.")
+  }
+  
+  # create output list
+  out <- list()
+  
+  # locally define time-varying dwell-time distribution
+  ddwell_t <- function(x, t, state){
+    ind <- (t + (1:max(x)) - 1) %% L
+    ind[which(ind == 0)] <- L
+    gamma_ii <- Gamma[state, state, ind]
+    pmf <- c(1, cumprod(gamma_ii)[-length(ind)]) * (1 - gamma_ii)
+    return(pmf[x])
+  }
+  
+  # check if t is NULL or a valid vector
+  if(!is.null(time)){
+    if (!is.vector(time) || any(time < 1) || any(time > L)) {
+      stop("'time' must be a vector of integers in the range [1, L].")
+    }
+    
+    for(s in state) {
+      thisout <- t(sapply(time, function(t) ddwell_t(x, t, s)))
+      rownames(thisout) <- paste0("t", time)
+      colnames(thisout) <- x
+      
+      if(nrow(thisout) == 1){
+        thisout <- as.numeric(thisout) # if only one time point, return vector
+        names(thisout) <- x
+      }
+      
+      out[[paste("state", s)]] <- thisout
+    }
+  } else { # compute overall dwell-time distribution
+    # compute all periodically stationary distributions
+    Delta <- stationary_p(Gamma)
+    
+    for(s in state) {
+      weights <- numeric(L) # calculate weights
+      weights[1] <- sum(Delta[L, -s] * Gamma[-s, s, L])
+      for (k in 2:L) { 
+        weights[k] <- sum(Delta[k-1, -s] * Gamma[-s, s, k-1])
+      }
+      weights <- weights / sum(weights)
+      
+      pmfs_weighted <- matrix(NA, L, length(x))
+      for(k in 1:L) { 
+        pmfs_weighted[k,] <- weights[k] * ddwell_t(x, k, s) 
+      }
+      
+      pmf <- as.numeric(colSums(pmfs_weighted))
+      names(pmf) <- x
+      
+      out[[paste("state", s)]] <- pmf
+    }
+  }
+  
+  # check if only one state -> if so: drop top level
+  if(length(out) == 1) {
+    out <- out[[1]]
+  } else {
+    names(out) <- paste("state", state)
+  }
+  
+  return(out)
 }

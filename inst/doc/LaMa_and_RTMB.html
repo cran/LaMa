@@ -359,9 +359,9 @@ less prone to errors – which at the current state tend to happen when
 one is not experienced with <code>RTMB</code>.</p>
 <p>Here we demonstrate how to use <code>LaMa</code> and
 <code>RTMB</code> to fit hidden Markov models and their extensions. We
-always start by loading both packages.</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(LaMa) <span class="co"># development version</span></span>
-<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="fu">library</span>(RTMB)</span></code></pre></div>
+start by loading the <code>LaMa</code> package, which automatically
+loads <code>RTMB</code> as well.</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(LaMa)</span></code></pre></div>
 <p>For the purpose of this vignette, we will analyse the
 <code>trex</code> data set contained in the package. It contains hourly
 step lengths of a Tyrannosaurus rex, living 66 million years ago, and we
@@ -537,12 +537,12 @@ to do the backtransformation manually. We can just run the
 reporting:</p>
 <div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a>mod <span class="ot">=</span> obj<span class="sc">$</span><span class="fu">report</span>() <span class="co"># runs the reporting from the negative log-likelihood once</span></span>
 <span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a>(<span class="at">delta =</span> mod<span class="sc">$</span>delta)</span>
-<span id="cb10-3"><a href="#cb10-3" tabindex="-1"></a><span class="co">#&gt;  state 1  state 2 </span></span>
+<span id="cb10-3"><a href="#cb10-3" tabindex="-1"></a><span class="co">#&gt;       S1       S2 </span></span>
 <span id="cb10-4"><a href="#cb10-4" tabindex="-1"></a><span class="co">#&gt; 0.481525 0.518475</span></span>
 <span id="cb10-5"><a href="#cb10-5" tabindex="-1"></a>(<span class="at">Gamma =</span> mod<span class="sc">$</span>Gamma)</span>
-<span id="cb10-6"><a href="#cb10-6" tabindex="-1"></a><span class="co">#&gt;           [,1]      [,2]</span></span>
-<span id="cb10-7"><a href="#cb10-7" tabindex="-1"></a><span class="co">#&gt; [1,] 0.8282951 0.1717049</span></span>
-<span id="cb10-8"><a href="#cb10-8" tabindex="-1"></a><span class="co">#&gt; [2,] 0.1594681 0.8405319</span></span>
+<span id="cb10-6"><a href="#cb10-6" tabindex="-1"></a><span class="co">#&gt;           S1        S2</span></span>
+<span id="cb10-7"><a href="#cb10-7" tabindex="-1"></a><span class="co">#&gt; S1 0.8282951 0.1717049</span></span>
+<span id="cb10-8"><a href="#cb10-8" tabindex="-1"></a><span class="co">#&gt; S2 0.1594681 0.8405319</span></span>
 <span id="cb10-9"><a href="#cb10-9" tabindex="-1"></a>(<span class="at">mu =</span> mod<span class="sc">$</span>mu)</span>
 <span id="cb10-10"><a href="#cb10-10" tabindex="-1"></a><span class="co">#&gt; [1] 0.3037305 2.5048106</span></span>
 <span id="cb10-11"><a href="#cb10-11" tabindex="-1"></a>(<span class="at">sigma =</span> mod<span class="sc">$</span>sigma)</span>
@@ -661,12 +661,22 @@ day.</p>
 design matrix <code>Z</code> corresponding to above predictor and add
 the time of day to the <code>dat</code> list for indexing inside the
 likelihood function. The <code>LaMa</code> function
-<code>trigBasisExp()</code> does this very conveniently.</p>
-<div class="sourceCode" id="cb20"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" tabindex="-1"></a><span class="co"># building trigonometric basis desing matrix (in this case no intercept column)</span></span>
-<span id="cb20-2"><a href="#cb20-2" tabindex="-1"></a>Z <span class="ot">=</span> <span class="fu">trigBasisExp</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">24</span>, <span class="at">degree =</span> <span class="dv">2</span>) <span class="co"># convenience function from LaMa</span></span>
-<span id="cb20-3"><a href="#cb20-3" tabindex="-1"></a><span class="co"># only compute the 24 unique values and index later for entire time series</span></span>
-<span id="cb20-4"><a href="#cb20-4" tabindex="-1"></a>dat<span class="sc">$</span>Z <span class="ot">=</span> Z <span class="co"># adding design matrix to dat</span></span>
-<span id="cb20-5"><a href="#cb20-5" tabindex="-1"></a>dat<span class="sc">$</span>tod <span class="ot">=</span> trex<span class="sc">$</span>tod <span class="co"># adding time of day to dat for indexing</span></span></code></pre></div>
+<code>cosinor()</code> does this very conveniently. We can either call
+it directly to build the design matrix, or use it in a
+<code>formula</code> passed to <code>make_matrices()</code>. The latter
+is preferable when dealing with more complicated models. Note that the
+first option does not include an intercept column, while the second
+does. When used with <code>tpm_g()</code> this does not matter as it
+automatically checks if an intercept column is included.</p>
+<div class="sourceCode" id="cb20"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" tabindex="-1"></a>Z <span class="ot">=</span> <span class="fu">cosinor</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">24</span>, <span class="at">period =</span> <span class="fu">c</span>(<span class="dv">24</span>, <span class="dv">12</span>))</span>
+<span id="cb20-2"><a href="#cb20-2" tabindex="-1"></a></span>
+<span id="cb20-3"><a href="#cb20-3" tabindex="-1"></a>modmat <span class="ot">=</span> <span class="fu">make_matrices</span>(<span class="sc">~</span> <span class="fu">cosinor</span>(tod, <span class="at">period =</span> <span class="fu">c</span>(<span class="dv">24</span>, <span class="dv">12</span>)), </span>
+<span id="cb20-4"><a href="#cb20-4" tabindex="-1"></a>                       <span class="at">data =</span> <span class="fu">data.frame</span>(<span class="at">tod =</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">24</span>))</span>
+<span id="cb20-5"><a href="#cb20-5" tabindex="-1"></a>Z <span class="ot">=</span> modmat<span class="sc">$</span>Z</span>
+<span id="cb20-6"><a href="#cb20-6" tabindex="-1"></a></span>
+<span id="cb20-7"><a href="#cb20-7" tabindex="-1"></a><span class="co"># only compute the 24 unique values and index later for entire time series</span></span>
+<span id="cb20-8"><a href="#cb20-8" tabindex="-1"></a>dat<span class="sc">$</span>Z <span class="ot">=</span> Z <span class="co"># adding design matrix to dat</span></span>
+<span id="cb20-9"><a href="#cb20-9" tabindex="-1"></a>dat<span class="sc">$</span>tod <span class="ot">=</span> trex<span class="sc">$</span>tod <span class="co"># adding time of day to dat for indexing</span></span></code></pre></div>
 <p>We also need to change the parameter list <code>par</code> to include
 the regression parameters for the time of day. The regression parameters
 for the state process will typically have the form of a <span class="math inline">\(N (N-1) \times p+1\)</span> matrix, where <span class="math inline">\(N\)</span> is the number of states and <span class="math inline">\(p\)</span> is the number of regressors – this
@@ -679,7 +689,7 @@ matrices inside the likelihood function unnessesary.</p>
 <span id="cb21-2"><a href="#cb21-2" tabindex="-1"></a>           <span class="at">logsigma =</span> <span class="fu">log</span>(<span class="fu">c</span>(<span class="fl">0.2</span>, <span class="fl">0.7</span>)),</span>
 <span id="cb21-3"><a href="#cb21-3" tabindex="-1"></a>           <span class="at">logkappa =</span> <span class="fu">log</span>(<span class="fu">c</span>(<span class="fl">0.2</span>, <span class="fl">0.7</span>)),</span>
 <span id="cb21-4"><a href="#cb21-4" tabindex="-1"></a>           <span class="at">beta =</span> <span class="fu">matrix</span>(<span class="fu">c</span>(<span class="fu">rep</span>(<span class="sc">-</span><span class="dv">2</span>, <span class="dv">2</span>), </span>
-<span id="cb21-5"><a href="#cb21-5" tabindex="-1"></a>                           <span class="fu">rep</span>(<span class="dv">0</span>, <span class="dv">2</span><span class="sc">*</span><span class="fu">ncol</span>(Z))), <span class="at">nrow =</span> <span class="dv">2</span>)) <span class="co"># 2 times 4+1 matrix</span></span>
+<span id="cb21-5"><a href="#cb21-5" tabindex="-1"></a>                           <span class="fu">rep</span>(<span class="dv">0</span>, <span class="dv">2</span><span class="sc">*</span><span class="dv">4</span>)), <span class="at">nrow =</span> <span class="dv">2</span>)) <span class="co"># 2 times 4+1 matrix</span></span>
 <span id="cb21-6"><a href="#cb21-6" tabindex="-1"></a><span class="co"># replacing eta with regression parameter matrix, initializing slopes at zero</span></span></code></pre></div>
 <p>We can now define a more general likelihood function with the main
 difference being the use of <code>tpm_g()</code> instead of
@@ -693,7 +703,7 @@ of <code>forward()</code> to calculate the log-likelihood.</p>
 <span id="cb22-3"><a href="#cb22-3" tabindex="-1"></a>  Gamma <span class="ot">=</span> <span class="fu">tpm_g</span>(Z, beta) <span class="co"># covariate-dependent tpms (in this case only 24 unique)</span></span>
 <span id="cb22-4"><a href="#cb22-4" tabindex="-1"></a>  <span class="co"># tpm_g() automatically checks if intercept column is included</span></span>
 <span id="cb22-5"><a href="#cb22-5" tabindex="-1"></a>  <span class="fu">ADREPORT</span>(Gamma) <span class="co"># adreporting</span></span>
-<span id="cb22-6"><a href="#cb22-6" tabindex="-1"></a>  Delta <span class="ot">=</span> <span class="fu">stationary_p</span>(Gamma) <span class="co"># periodically stationary distribution</span></span>
+<span id="cb22-6"><a href="#cb22-6" tabindex="-1"></a>  Delta <span class="ot">=</span> <span class="fu">stationary_p</span>(Gamma) <span class="co"># all periodically stationary distributions</span></span>
 <span id="cb22-7"><a href="#cb22-7" tabindex="-1"></a>  <span class="fu">ADREPORT</span>(Delta)</span>
 <span id="cb22-8"><a href="#cb22-8" tabindex="-1"></a>  delta <span class="ot">=</span> Delta[tod[<span class="dv">1</span>],] <span class="co"># initial periodically stationary distribution</span></span>
 <span id="cb22-9"><a href="#cb22-9" tabindex="-1"></a>  <span class="co"># exponentiating because all parameters strictly positive</span></span>
@@ -710,7 +720,7 @@ of <code>forward()</code> to calculate the log-likelihood.</p>
 <span id="cb22-20"><a href="#cb22-20" tabindex="-1"></a>}</span></code></pre></div>
 <p>Having done this, the model fit is then essentially the same:</p>
 <div class="sourceCode" id="cb23"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb23-1"><a href="#cb23-1" tabindex="-1"></a>obj2 <span class="ot">=</span> <span class="fu">MakeADFun</span>(nll2, par, <span class="at">silent =</span> <span class="cn">TRUE</span>) <span class="co"># creating the objective function</span></span>
-<span id="cb23-2"><a href="#cb23-2" tabindex="-1"></a>opt2 <span class="ot">=</span> <span class="fu">nlminb</span>(obj2<span class="sc">$</span>par, obj2<span class="sc">$</span>fn, obj2<span class="sc">$</span>gr) <span class="co"># optimization</span></span></code></pre></div>
+<span id="cb23-2"><a href="#cb23-2" tabindex="-1"></a>opt2 <span class="ot">=</span> <span class="fu">nlminb</span>(obj2<span class="sc">$</span>par, obj2<span class="sc">$</span>fn, obj2<span class="sc">$</span>gr) <span class="co"># optimisation</span></span></code></pre></div>
 <p>and we can look at the reported results. In this case, for simplicity
 I get standard errors for <code>Gamma</code> with the delta method
 while, in general, this is not advisable.</p>

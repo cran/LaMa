@@ -11,36 +11,60 @@
 #' 
 #' @seealso \code{\link{tpm}} to create a transition probabilty matrix using the multinomial logistic link (softmax)
 #
-#' @param Gamma transition probability matrix of dimension c(N,N)
+#' @param Gamma transition probability matrix of dimension \code{c(N,N)} or array of such matrices of dimension \code{c(N,N,nTracks)} if the stationary distribution should be computed for several matrices at once
 #'
-#' @return stationary distribution of the Markov chain with the given transition probability matrix
+#' @return either a single stationary distribution of the Markov chain (vector of length \code{N}) or a matrix of stationary distributions of dimension \code{c(nTracks,N)} with one stationary distribution in each row
 #' @export
 #' @import RTMB
 #'
 #' @examples
+#' # single matrix
 #' Gamma = tpm(c(rep(-2,3), rep(-3,3)))
 #' delta = stationary(Gamma)
+#' # multiple matrices
+#' Gamma = array(Gamma, dim = c(3,3,10))
+#' Delta = stationary(Gamma)
 stationary = function(Gamma){
   "[<-" <- ADoverload("[<-") # overloading assignment operators, currently necessary
   "c" <- ADoverload("c")
   "diag<-" <- ADoverload("diag<-")
   
-  N = dim(Gamma)[1]
-  delta = RTMB::solve(t(diag(N)-Gamma+1), rep(1,N))
-  names(delta) = paste("state", 1:N)
+  Gamma_dim <- dim(Gamma)
+  N <- Gamma_dim[1]
+  statenames <- paste0("S", 1:N)
+  
+  ## check if Gamma is matrix or array
+  if(length(Gamma_dim) == 2){ # matrix
+    delta <- RTMB::solve(t(diag(N) - Gamma + 1), rep(1,N))
+    names(delta) <- statenames
+  } else if(length(Gamma_dim) == 3){ # array
+    delta <- t(sapply(1:Gamma_dim[3], function(t){
+      RTMB::solve(t(diag(N) - Gamma[,,t] + 1), rep(1,N))
+    }))
+    colnames(delta) <- statenames
+    rownames(delta) <- 1:Gamma_dim[3]
+  } else{
+    stop("'Gamma' either needs to be a matrix or an array")
+  }
+  
   delta
 }
 
 
-#' Compute the periodically stationary distribution of a periodically inhomogeneous Markov chain
+#' Periodically stationary distribution of a periodically inhomogeneous Markov chain
 #'
 #' @description
+#' Computes the periodically stationary distribution of a periodically inhomogeneous Markov chain.
+#'
+#' @details
 #' If the transition probability matrix of an inhomogeneous Markov chain varies only periodically (with period length \eqn{L}), it converges to a so-called periodically stationary distribution. 
 #' This happens, because the thinned Markov chain, which has a full cycle as each time step, has homogeneous transition probability matrix
 #' \deqn{\Gamma_t = \Gamma^{(t)} \Gamma^{(t+1)} \dots \Gamma^{(t+L-1)}} for all \eqn{t = 1, \dots, L.}
 #' The stationary distribution for time \eqn{t} satifies \eqn{\delta^{(t)} \Gamma_t = \delta^{(t)}}.
 #' 
 #' This function calculates said periodically stationary distribution.
+#' 
+#' @references Koslik, J. O., Feldmann, C. C., Mews, S., Michels, R., & Langrock, R. (2023). Inference on the state process of periodically inhomogeneous hidden Markov models for animal behavior. arXiv preprint arXiv:2312.14583.
 #'
 #' @family stationary distribution functions
 #' 
@@ -89,12 +113,13 @@ stationary_p = function(Gamma, t = NULL, ad = NULL){
       for(t in 2:L){
         Delta[t,] = Delta[t-1,]%*%Gamma[,,t-1]
       }
-      colnames(Delta) = paste("state", 1:N)
+      colnames(Delta) = paste0("S", 1:N)
+      rownames(Delta) = 1:L
       return(Delta)
     } else{
       GammaT = tpm_thinned(Gamma, t)
       delta = stationary(GammaT)
-      names(delta) = paste("state", 1:length(delta))
+      names(delta) = paste0("S", 1:N)
       return(delta)
     }
   } else if(ad) {
@@ -115,7 +140,8 @@ stationary_p = function(Gamma, t = NULL, ad = NULL){
       for(t in 2:L){
         Delta[t,] = c(t(Delta[t-1,]) %*% Gamma[,,t-1])
       }
-      colnames(Delta) = paste("state", 1:N)
+      colnames(Delta) = paste0("S", 1:N)
+      rownames(Delta) = 1:L
       return(Delta)
     } else{
       GammaT = Gamma[,,t]
@@ -147,23 +173,42 @@ stationary_p = function(Gamma, t = NULL, ad = NULL){
 #'
 #' @seealso \code{\link{generator}} to create a generator matrix
 #
-#' @param Q infinitesimal generator matrix of dimension c(N,N)
+#' @param Q infinitesimal generator matrix of dimension \code{c(N,N)} or array of such matrices of dimension \code{c(N,N,nTracks)} if the stationary distribution should be computed for several matrices at once
 #'
-#' @return stationary distribution of the continuous-time Markov chain with given generator matrix
+#' @return either a single stationary distribution of the continuous-time Markov chain (vector of length \code{N}) or a matrix of stationary distributions of dimension \code{c(nTracks,N)} with one stationary distribution in each row
 #' @export
 #' @import RTMB
 #'
 #' @examples
+#' # single matrix
 #' Q = generator(c(-2,-2))
+#' Pi = stationary_cont(Q)
+#' # multiple matrices
+#' Q = array(Q, dim = c(2,2,10))
 #' Pi = stationary_cont(Q)
 stationary_cont = function(Q){
   "[<-" <- ADoverload("[<-") # overloading assignment operators, currently necessary
   "c" <- ADoverload("c")
   "diag<-" <- ADoverload("diag<-")
   
-  N = dim(Q)[1]
-  Pi = RTMB::solve(t(Q + 1), rep(1,N))
-  names(Pi) = paste("state", 1:N)
+  Q_dim <- dim(Q)
+  N = Q_dim[1]
+  statenames <- paste0("S", 1:N)
+  
+  ## check if Gamma is matrix or array
+  if(length(Q_dim) == 2){ # matrix
+    Pi <- RTMB::solve(t(Q + 1), rep(1,N))
+    names(Pi) <- statenames
+  } else if(length(Q_dim) == 3){ # array
+    Pi <- t(sapply(1:Q_dim[3], function(t){
+      RTMB::solve(t(Q[,,t] + 1), rep(1,N))
+    }))
+    colnames(Pi) <- statenames
+    rownames(Pi) <- 1:Q_dim[3]
+  } else{
+    stop("'Q' either needs to be a matrix or an array")
+  }
+  
   Pi
 }
 

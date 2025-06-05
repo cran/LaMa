@@ -2,7 +2,7 @@ Package: LaMa
 Type: Package
 Title: Fast Numerical Maximum Likelihood Estimation for Latent Markov
         Models
-Version: 2.0.3
+Version: 2.0.4
 Authors@R: c(
     person(given = "Jan-Ole", family = "Koslik", 
           email = "jan-ole.koslik@uni-bielefeld.de",
@@ -19,8 +19,8 @@ Description:
 URL: https://janoleko.github.io/LaMa/
 License: GPL-3
 Encoding: UTF-8
-Imports: Rcpp, mgcv, Matrix, stats, utils, MASS, mvtnorm, splines,
-        methods, CircStats, circular, sn
+Imports: Rcpp, mgcv, Matrix, stats, utils, MASS, splines2, methods,
+        CircStats, circular, sn, numDeriv
 LinkingTo: Rcpp, RcppArmadillo
 Depends: R (>= 3.5.0), RTMB
 RoxygenNote: 7.3.2
@@ -29,8 +29,9 @@ VignetteBuilder: knitr
 Config/testthat/edition: 3
 LazyData: true
 NeedsCompilation: yes
-Packaged: 2025-01-29 10:06:34 UTC; jan-ole
-Author: Jan-Ole Koslik [aut, cre] (<https://orcid.org/0009-0004-1556-9053>)
+Packaged: 2025-06-05 14:54:48 UTC; jan-ole
+Author: Jan-Ole Koslik [aut, cre] (ORCID:
+    <https://orcid.org/0009-0004-1556-9053>)
 Maintainer: Jan-Ole Koslik <jan-ole.koslik@uni-bielefeld.de>
 Repository: CRAN
-Date/Publication: 2025-01-29 10:30:02 UTC
+Date/Publication: 2025-06-05 15:20:02 UTC

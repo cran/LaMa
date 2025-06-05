@@ -482,7 +482,7 @@ state-dependent density matrices to be <span class="math inline">\(\Lambda\)</sp
 <span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a>  mod <span class="ot">&lt;-</span> <span class="fu">nlm</span>(nll, par, <span class="at">timediff =</span> timediff, <span class="at">N =</span> <span class="dv">2</span>, <span class="at">stepmax =</span> <span class="dv">10</span>)</span>
 <span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a>)</span>
 <span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a><span class="co">#&gt;   0.075   0.000   0.075</span></span>
+<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a><span class="co">#&gt;   0.077   0.001   0.078</span></span>
 <span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a><span class="co"># we often need the stepmax, as the matrix exponential can be numerically unstable</span></span></code></pre></div>
 </div>
 <div id="results" class="section level3">
@@ -490,11 +490,11 @@ state-dependent density matrices to be <span class="math inline">\(\Lambda\)</sp
 <div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a>(<span class="at">lambda =</span> <span class="fu">exp</span>(mod<span class="sc">$</span>estimate[<span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>]))</span>
 <span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="co">#&gt; [1]  1.949689 15.083122</span></span>
 <span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a>(<span class="at">Q =</span> <span class="fu">generator</span>(mod<span class="sc">$</span>estimate[<span class="dv">3</span><span class="sc">:</span><span class="dv">4</span>]))</span>
-<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a><span class="co">#&gt;            [,1]       [,2]</span></span>
-<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a><span class="co">#&gt; [1,] -0.4003955  0.4003955</span></span>
-<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a><span class="co">#&gt; [2,]  1.8998849 -1.8998849</span></span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a><span class="co">#&gt;            S1         S2</span></span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a><span class="co">#&gt; S1 -0.4003955  0.4003955</span></span>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a><span class="co">#&gt; S2  1.8998849 -1.8998849</span></span>
 <span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a>(<span class="at">Pi =</span> <span class="fu">stationary_cont</span>(Q))</span>
-<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a><span class="co">#&gt;   state 1   state 2 </span></span>
+<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a><span class="co">#&gt;        S1        S2 </span></span>
 <span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a><span class="co">#&gt; 0.8259362 0.1740638</span></span></code></pre></div>
 </div>
 </div>
@@ -611,7 +611,7 @@ rates.</p>
 <span id="cb12-8"><a href="#cb12-8" tabindex="-1"></a>  mod2 <span class="ot">&lt;-</span> <span class="fu">nlm</span>(nllMark, par, <span class="at">y =</span> marks, <span class="at">timediff =</span> timediff, <span class="at">N =</span> <span class="dv">3</span>, <span class="at">stepmax =</span> <span class="dv">5</span>)</span>
 <span id="cb12-9"><a href="#cb12-9" tabindex="-1"></a>)</span>
 <span id="cb12-10"><a href="#cb12-10" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb12-11"><a href="#cb12-11" tabindex="-1"></a><span class="co">#&gt;   0.597   0.010   0.612</span></span></code></pre></div>
+<span id="cb12-11"><a href="#cb12-11" tabindex="-1"></a><span class="co">#&gt;   0.580   0.006   0.587</span></span></code></pre></div>
 </div>
 <div id="results-1" class="section level3">
 <h3>Results</h3>
@@ -619,17 +619,17 @@ rates.</p>
 <span id="cb13-2"><a href="#cb13-2" tabindex="-1"></a>(<span class="at">lambda =</span> <span class="fu">exp</span>(mod2<span class="sc">$</span>estimate[<span class="dv">1</span><span class="sc">:</span>N]))</span>
 <span id="cb13-3"><a href="#cb13-3" tabindex="-1"></a><span class="co">#&gt; [1]  0.9646715  4.8640549 19.5008964</span></span>
 <span id="cb13-4"><a href="#cb13-4" tabindex="-1"></a>(<span class="at">mu =</span> mod2<span class="sc">$</span>estimate[N<span class="sc">+</span><span class="dv">1</span><span class="sc">:</span>N])</span>
-<span id="cb13-5"><a href="#cb13-5" tabindex="-1"></a><span class="co">#&gt; [1] -5.18540506 -0.09097056  4.80538783</span></span>
+<span id="cb13-5"><a href="#cb13-5" tabindex="-1"></a><span class="co">#&gt; [1] -5.18540504 -0.09097056  4.80538783</span></span>
 <span id="cb13-6"><a href="#cb13-6" tabindex="-1"></a>(<span class="at">sigma =</span> <span class="fu">exp</span>(mod2<span class="sc">$</span>estimate[<span class="dv">2</span><span class="sc">*</span>N<span class="sc">+</span><span class="dv">1</span><span class="sc">:</span>N]))</span>
 <span id="cb13-7"><a href="#cb13-7" tabindex="-1"></a><span class="co">#&gt; [1] 1.7931063 0.9644485 2.0093266</span></span>
 <span id="cb13-8"><a href="#cb13-8" tabindex="-1"></a>(<span class="at">Q =</span> <span class="fu">generator</span>(mod2<span class="sc">$</span>estimate[<span class="dv">3</span><span class="sc">*</span>N<span class="sc">+</span><span class="dv">1</span><span class="sc">:</span>(N<span class="sc">*</span>(N<span class="dv">-1</span>))]))</span>
-<span id="cb13-9"><a href="#cb13-9" tabindex="-1"></a><span class="co">#&gt;            [,1]       [,2]       [,3]</span></span>
-<span id="cb13-10"><a href="#cb13-10" tabindex="-1"></a><span class="co">#&gt; [1,] -0.5909290  0.2788642  0.3120648</span></span>
-<span id="cb13-11"><a href="#cb13-11" tabindex="-1"></a><span class="co">#&gt; [2,]  0.9258937 -1.1798376  0.2539439</span></span>
-<span id="cb13-12"><a href="#cb13-12" tabindex="-1"></a><span class="co">#&gt; [3,]  1.1933693  1.2097186 -2.4030879</span></span>
+<span id="cb13-9"><a href="#cb13-9" tabindex="-1"></a><span class="co">#&gt;            S1         S2         S3</span></span>
+<span id="cb13-10"><a href="#cb13-10" tabindex="-1"></a><span class="co">#&gt; S1 -0.5909289  0.2788642  0.3120648</span></span>
+<span id="cb13-11"><a href="#cb13-11" tabindex="-1"></a><span class="co">#&gt; S2  0.9258937 -1.1798376  0.2539438</span></span>
+<span id="cb13-12"><a href="#cb13-12" tabindex="-1"></a><span class="co">#&gt; S3  1.1933694  1.2097185 -2.4030879</span></span>
 <span id="cb13-13"><a href="#cb13-13" tabindex="-1"></a>(<span class="at">Pi =</span> <span class="fu">stationary_cont</span>(Q))</span>
-<span id="cb13-14"><a href="#cb13-14" tabindex="-1"></a><span class="co">#&gt;   state 1   state 2   state 3 </span></span>
-<span id="cb13-15"><a href="#cb13-15" tabindex="-1"></a><span class="co">#&gt; 0.6296990 0.2609524 0.1093485</span></span></code></pre></div>
+<span id="cb13-14"><a href="#cb13-14" tabindex="-1"></a><span class="co">#&gt;        S1        S2        S3 </span></span>
+<span id="cb13-15"><a href="#cb13-15" tabindex="-1"></a><span class="co">#&gt; 0.6296991 0.2609524 0.1093485</span></span></code></pre></div>
 </div>
 </div>
 <div id="references" class="section level2 unnumbered">

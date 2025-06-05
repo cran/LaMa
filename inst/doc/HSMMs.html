@@ -494,7 +494,7 @@ distributions is covered.</p>
 <span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a>  mod <span class="ot">&lt;-</span> <span class="fu">nlm</span>(nll, par, <span class="at">x =</span> x, <span class="at">N =</span> <span class="dv">3</span>, <span class="at">agsizes =</span> agsizes, <span class="at">stepmax =</span> <span class="dv">2</span>)</span>
 <span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a>)</span>
 <span id="cb5-11"><a href="#cb5-11" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb5-12"><a href="#cb5-12" tabindex="-1"></a><span class="co">#&gt;   0.449   0.001   0.450</span></span></code></pre></div>
+<span id="cb5-12"><a href="#cb5-12" tabindex="-1"></a><span class="co">#&gt;   0.465   0.004   0.470</span></span></code></pre></div>
 <p>Fitting HSMMs is rather slow (even using C++) as we translate the
 additional model complexity into a higher computational overhead (31
 states here).</p>
@@ -509,10 +509,10 @@ states here).</p>
 <span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a>(<span class="at">lambda =</span> <span class="fu">exp</span>(mod<span class="sc">$</span>estimate[<span class="dv">2</span><span class="sc">*</span>N<span class="sc">+</span><span class="dv">1</span><span class="sc">:</span>N]))</span>
 <span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a><span class="co">#&gt; [1] 6.942983 4.595469 3.354765</span></span>
 <span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a>(<span class="at">omega =</span> <span class="fu">tpm_emb</span>(mod<span class="sc">$</span>estimate[<span class="dv">3</span><span class="sc">*</span>N<span class="sc">+</span><span class="dv">1</span><span class="sc">:</span>(N<span class="sc">*</span>(N<span class="dv">-2</span>))]))</span>
-<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a><span class="co">#&gt;           [,1]      [,2]      [,3]</span></span>
-<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a><span class="co">#&gt; [1,] 0.0000000 0.5541030 0.4458970</span></span>
-<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a><span class="co">#&gt; [2,] 0.5040937 0.0000000 0.4959063</span></span>
-<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a><span class="co">#&gt; [3,] 0.6654703 0.3345297 0.0000000</span></span></code></pre></div>
+<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a><span class="co">#&gt;           S1        S2        S3</span></span>
+<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a><span class="co">#&gt; S1 0.0000000 0.5541030 0.4458970</span></span>
+<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a><span class="co">#&gt; S2 0.5040937 0.0000000 0.4959063</span></span>
+<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a><span class="co">#&gt; S3 0.6654703 0.3345297 0.0000000</span></span></code></pre></div>
 </div>
 </div>
 <div id="real-data-application" class="section level2">
@@ -525,13 +525,13 @@ analysed by <span class="citation">Pohle, Adam, and Beumer (<a href="#ref-pohle2
 <div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="fu">library</span>(PHSMM)</span>
 <span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a>data <span class="ot">=</span> muskox[<span class="dv">1</span><span class="sc">:</span><span class="dv">1000</span>, ] <span class="co"># only using first 1000 observations for speed</span></span>
 <span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a><span class="fu">head</span>(data)</span>
-<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a><span class="co">#&gt;                      date tday        x       y       step</span></span>
-<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a><span class="co">#&gt; 88273 2013-10-11 22:00:00   15 513299.2 8264867  17.998874</span></span>
-<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a><span class="co">#&gt; 88274 2013-10-11 22:00:00   16 513283.4 8264875   8.214733</span></span>
-<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a><span class="co">#&gt; 88275 2013-10-11 22:00:00   17 513284.3 8264883   7.205098</span></span>
-<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a><span class="co">#&gt; 88276 2013-10-11 22:00:00   18 513280.4 8264877  53.378332</span></span>
-<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a><span class="co">#&gt; 88277 2013-10-11 22:00:00   19 513252.0 8264922 719.242687</span></span>
-<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a><span class="co">#&gt; 88278 2013-10-11 22:00:00   20 513386.7 8265629  10.797127</span></span></code></pre></div>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a><span class="co">#&gt;             date tday        x       y       step</span></span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a><span class="co">#&gt; 88273 2013-10-12   15 513299.2 8264867  17.998874</span></span>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a><span class="co">#&gt; 88274 2013-10-12   16 513283.4 8264875   8.214733</span></span>
+<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a><span class="co">#&gt; 88275 2013-10-12   17 513284.3 8264883   7.205098</span></span>
+<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a><span class="co">#&gt; 88276 2013-10-12   18 513280.4 8264877  53.378332</span></span>
+<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a><span class="co">#&gt; 88277 2013-10-12   19 513252.0 8264922 719.242687</span></span>
+<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a><span class="co">#&gt; 88278 2013-10-12   20 513386.7 8265629  10.797127</span></span></code></pre></div>
 <p>As these data have already been preprossed, we can immediately write
 the negative log-likelihood function. When modeling the dwell-time
 distribution of real processes, it is typically advisable to use a more
@@ -576,7 +576,7 @@ interpretability using <code>dgamma2()</code>.</p>
 <span id="cb9-11"><a href="#cb9-11" tabindex="-1"></a>                    <span class="at">agsizes =</span> agsizes, <span class="at">iterlim =</span> <span class="dv">500</span>)</span>
 <span id="cb9-12"><a href="#cb9-12" tabindex="-1"></a>)</span>
 <span id="cb9-13"><a href="#cb9-13" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb9-14"><a href="#cb9-14" tabindex="-1"></a><span class="co">#&gt;   2.407   0.018   2.434</span></span></code></pre></div>
+<span id="cb9-14"><a href="#cb9-14" tabindex="-1"></a><span class="co">#&gt;   2.392   0.005   2.398</span></span></code></pre></div>
 </div>
 <div id="results-1" class="section level3">
 <h3>Results</h3>
@@ -591,10 +591,10 @@ interpretability using <code>dgamma2()</code>.</p>
 <span id="cb10-8"><a href="#cb10-8" tabindex="-1"></a>(<span class="at">phi =</span> <span class="fu">exp</span>(par[<span class="dv">3</span><span class="sc">*</span>N<span class="sc">+</span><span class="dv">1</span><span class="sc">:</span>N])) <span class="co"># dwell time dispersion</span></span>
 <span id="cb10-9"><a href="#cb10-9" tabindex="-1"></a><span class="co">#&gt; [1] 5.257122e-05 3.750291e-02 4.694075e-09</span></span>
 <span id="cb10-10"><a href="#cb10-10" tabindex="-1"></a>(<span class="at">omega =</span> <span class="fu">tpm_emb</span>(par[<span class="dv">4</span><span class="sc">*</span>N<span class="sc">+</span><span class="dv">1</span><span class="sc">:</span>(N<span class="sc">*</span>(N<span class="dv">-2</span>))])) <span class="co"># embedded t.p.m.</span></span>
-<span id="cb10-11"><a href="#cb10-11" tabindex="-1"></a><span class="co">#&gt;           [,1]      [,2]         [,3]</span></span>
-<span id="cb10-12"><a href="#cb10-12" tabindex="-1"></a><span class="co">#&gt; [1,] 0.0000000 0.6865914 3.134086e-01</span></span>
-<span id="cb10-13"><a href="#cb10-13" tabindex="-1"></a><span class="co">#&gt; [2,] 0.9999999 0.0000000 5.353656e-08</span></span>
-<span id="cb10-14"><a href="#cb10-14" tabindex="-1"></a><span class="co">#&gt; [3,] 0.8210764 0.1789236 0.000000e+00</span></span></code></pre></div>
+<span id="cb10-11"><a href="#cb10-11" tabindex="-1"></a><span class="co">#&gt;           S1        S2           S3</span></span>
+<span id="cb10-12"><a href="#cb10-12" tabindex="-1"></a><span class="co">#&gt; S1 0.0000000 0.6865914 3.134086e-01</span></span>
+<span id="cb10-13"><a href="#cb10-13" tabindex="-1"></a><span class="co">#&gt; S2 0.9999999 0.0000000 5.353656e-08</span></span>
+<span id="cb10-14"><a href="#cb10-14" tabindex="-1"></a><span class="co">#&gt; S3 0.8210764 0.1789236 0.000000e+00</span></span></code></pre></div>
 <p>In this case the Poisson distribution would have been sufficiently
 flexible as all dispersion parameters were estimated very close to zero.
 We can easily visualise the estimated state-specific dwell-time
