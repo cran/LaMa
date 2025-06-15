@@ -457,14 +457,14 @@ individuals in <code>R</code>.</p>
 <span id="cb4-8"><a href="#cb4-8" tabindex="-1"></a>  mod <span class="ot">&lt;-</span> <span class="fu">nlm</span>(nll_pool, par, <span class="at">x =</span> x, <span class="at">trackID =</span> trackID)</span>
 <span id="cb4-9"><a href="#cb4-9" tabindex="-1"></a>)</span>
 <span id="cb4-10"><a href="#cb4-10" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb4-11"><a href="#cb4-11" tabindex="-1"></a><span class="co">#&gt;   0.166   0.015   0.180</span></span>
+<span id="cb4-11"><a href="#cb4-11" tabindex="-1"></a><span class="co">#&gt;   0.164   0.020   0.183</span></span>
 <span id="cb4-12"><a href="#cb4-12" tabindex="-1"></a></span>
 <span id="cb4-13"><a href="#cb4-13" tabindex="-1"></a><span class="co"># slow version</span></span>
 <span id="cb4-14"><a href="#cb4-14" tabindex="-1"></a><span class="fu">system.time</span>(</span>
 <span id="cb4-15"><a href="#cb4-15" tabindex="-1"></a>  mod <span class="ot">&lt;-</span> <span class="fu">nlm</span>(nll_pool_slow, par, <span class="at">x =</span> x, <span class="at">K =</span> K)</span>
 <span id="cb4-16"><a href="#cb4-16" tabindex="-1"></a>)</span>
 <span id="cb4-17"><a href="#cb4-17" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb4-18"><a href="#cb4-18" tabindex="-1"></a><span class="co">#&gt;   1.107   0.014   1.121</span></span></code></pre></div>
+<span id="cb4-18"><a href="#cb4-18" tabindex="-1"></a><span class="co">#&gt;   1.116   0.030   1.146</span></span></code></pre></div>
 <p>In this example, looping over individuals in <code>R</code> already
 leads to five times longer the estimation time, but this can be much
 more severe for more complicated models.</p>
@@ -548,7 +548,7 @@ for each track respectively.</p>
 <span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a>  mod_partial <span class="ot">&lt;-</span> <span class="fu">nlm</span>(nll_partial, par, <span class="at">x =</span> x, <span class="at">z =</span> z, <span class="at">trackID =</span> trackID)</span>
 <span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a>)</span>
 <span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a><span class="co">#&gt;   0.159   0.004   0.162</span></span></code></pre></div>
+<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a><span class="co">#&gt;   0.157   0.005   0.162</span></span></code></pre></div>
 </div>
 </div>
 

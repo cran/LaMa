@@ -3,8 +3,8 @@
 #' Density, distribution function and random generation for the von Mises distribution.
 #' 
 #' @details
-#' The implementation of \code{dvm} allows for automatic differentiation with \code{RTMB}. 
-#' \code{rvm} and \code{pvm} are imported from \code{CircStats} and \code{circular} respectively.
+#' This implementation of \code{dvm} allows for automatic differentiation with \code{RTMB}. 
+#' \code{rvm} and \code{pvm} are simply wrappers of the corresponding functions from \code{circular}.
 #'
 #' @param x,q vector of angles measured in radians at which to evaluate the density function.
 #' @param mu mean direction of the distribution measured in radians.
@@ -66,9 +66,12 @@ pvm = function(q, mu = 0, kappa = 1, from = NULL, tol = 1e-20) {
 
 #' @rdname vm
 #' @export
-#' @importFrom CircStats rvm
+#' @importFrom circular rvonmises
 rvm = function(n, mu = 0, kappa = 1, wrap = TRUE) {
-  angles = CircStats::rvm(n, mu, kappa)
+  # angles = CircStats::rvm(n, mu, kappa)
+  suppressWarnings(
+    angles <- as.numeric(rvonmises(n, mu, kappa))
+  )
   
   # if generated angels should be wrapped, i.e. mapped to interval [-pi, pi], do so
   if(wrap){
@@ -83,8 +86,8 @@ rvm = function(n, mu = 0, kappa = 1, wrap = TRUE) {
 #' Density and random generation for the wrapped Cauchy distribution.
 #' 
 #' @details
-#' The implementation of \code{dwrpcauchy} allows for automatic differentiation with \code{RTMB}. 
-#' \code{rwrpcauchy} is imported from \code{CircStats}.
+#' This implementation of \code{dwrpcauchy} allows for automatic differentiation with \code{RTMB}. 
+#' \code{rwrpcauchy} is simply a wrapper for \code{rwrappedcauchy}imported from \code{circular}.
 #'
 #' @param x vector of angles measured in radians at which to evaluate the density function.
 #' @param mu mean direction of the distribution measured in radians.
@@ -118,9 +121,11 @@ dwrpcauchy <- function(x, mu = 0, rho, log = FALSE) {
 
 #' @rdname wrpcauchy
 #' @export
-#' @importFrom CircStats rwrpcauchy
+#' @importFrom circular rwrappedcauchy
 rwrpcauchy = function(n, mu = 0, rho, wrap = TRUE) {
-  angles = CircStats::rwrpcauchy(n, mu, rho)
+  suppressWarnings(
+    angles <- as.numeric(rwrappedcauchy(n, mu, rho))
+  )
   
   # if generated angels should be wrapped, i.e. mapped to interval [-pi, pi], do so
   if(wrap){
