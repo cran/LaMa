@@ -127,16 +127,9 @@ summary(sdr)
 
 ## ----pres, fig.width = 8, fig.height = 4--------------------------------------
 pres_step = pseudo_res(trex$step, "gamma2", list(mean = mu, sd = sigma), mod = mod)
+plot(pres_step, hist = TRUE)
 pres_angle = pseudo_res(trex$angle, "vm", list(mu = 0, kappa = kappa), mod = mod)
-
-oldpar = par(mfrow = c(1,2))
-hist(pres_step, prob = TRUE, breaks = 40, 
-     bor = "white", main = "pseudo-residuals", xlab = "step length")
-curve(dnorm(x, 0, 1), lwd = 2, add = T, lty = 2)
-hist(pres_angle, prob = TRUE, breaks = 40, 
-     bor = "white", main = "pseudo-residuals", xlab = "turning angle")
-curve(dnorm(x, 0, 1), lwd = 2, add = T, lty = 2)
-par(oldpar)
+plot(pres_angle, hist = TRUE)
 
 ## ----tod----------------------------------------------------------------------
 Z = cosinor(1:24, period = c(24, 12))

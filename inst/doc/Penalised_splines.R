@@ -74,9 +74,9 @@ system.time(
 Delta = mod1$Delta
 
 tod_seq = seq(0, 24, length = 100)
-Z_pred = predict(modmat, data.frame(tod = tod_seq))
+Z_p = predict(modmat, data.frame(tod = tod_seq))
 
-Gamma_plot = tpm_g(Z_pred, mod1$beta) # interpolating transition probs
+Gamma_plot = tpm_g(Z_p, mod1$beta) # interpolating transition probs
 
 plot(tod_seq, Gamma_plot[1,2,], type = "l", lwd = 2, ylim = c(0,1),
      xlab = "time of day", ylab = "transition probability", bty = "n")
@@ -148,7 +148,7 @@ S = modmat$S$logODBA # penalty matrix for logODBA
 beta = modmat$coef$logODBA # initial spline coefficients
 
 # objects for prediction
-Z_pred = modmat$Z_predict$logODBA # prediction design matrix
+Z_p = modmat$Z_predict$logODBA # prediction design matrix
 xseq = modmat$xseq$logODBA # prediction sequence of logODBA values
 
 ## ----pnll2--------------------------------------------------------------------
@@ -184,7 +184,7 @@ system.time(
 )
 
 ## ----shark_smooth_results, fig.width = 9, fig.height = 5----------------------
-sDens = Z_pred %*% t(mod2$alpha) # all three state-dependent densities on a grid
+sDens = Z_p %*% t(mod2$alpha) # all three state-dependent densities on a grid
 
 hist(nessi$logODBA, prob = TRUE, breaks = 50, bor = "white", main = "", xlab = "log(ODBA)")
 for(j in 1:3) lines(xseq, mod2$delta[j] * sDens[,j], col = color[j], lwd = 2)
@@ -241,12 +241,12 @@ system.time(
 
 ## ----energy_results, fig.width = 9, fig.height = 5----------------------------
 xseq = seq(min(energy$Oil), max(energy$Oil), length = 200) # sequence for prediction
-Z_pred = predict(modmat, newdata = data.frame(Oil = xseq)) # prediction design matrix
+Z_p = predict(modmat, newdata = data.frame(Oil = xseq)) # prediction design matrix
 
 energy$states = viterbi(mod = mod3) # decoding most probable state sequence
 
-Mu_plot = Z_pred %*% t(mod3$beta)
-Sigma_plot = exp(Z_pred %*% t(mod3$alpha))
+Mu_plot = Z_p %*% t(mod3$beta)
+Sigma_plot = exp(Z_p %*% t(mod3$alpha))
 
 library(scales) # to make colors semi-transparent
 

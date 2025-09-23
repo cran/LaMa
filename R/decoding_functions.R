@@ -53,6 +53,9 @@ viterbi = function(delta, Gamma, allprobs, trackID = NULL,
   
   # inflating Gamma to use viterbi_g
   if(is.null(trackID)){
+    if(length(dim(Gamma)) > 2){
+      stop("If no 'trackID' is provided, 'Gamma' needs to be a matrix of dimension c(N,N). \nDo you need to use 'viterbi_g()'?")
+    }
     Gammanew = array(Gamma, dim = c(N, N, n-1))
   } else{
     uID = unique(trackID)
@@ -118,8 +121,8 @@ viterbi_g = function(delta, Gamma, allprobs, trackID = NULL,
     
     # if suitable model object is provided, overwrite inputs with model object
     delta = mod$delta
-    # Gamma = mod$Gamma
-    Gamma = mod$Gamma[,, -1] # ignoring first slice
+    Gamma = mod$Gamma
+    # Gamma = mod$Gamma[,, -1] # ignoring first slice
     allprobs = mod$allprobs
     trackID = mod$trackID
   }
@@ -185,7 +188,7 @@ viterbi_g = function(delta, Gamma, allprobs, trackID = NULL,
     }
     
     if(dim(Gamma)[3]==n){
-      warning("Igoring the first slice of Gamma, as there are only n-1 transitions in a time series of length n.")
+      message("Igoring the first slice of Gamma, as there are only n-1 transitions in a time series of length n.")
       # not using the first slice of Gamma, if n slices are provided
       Gamma = Gamma[,,-1]
     }
@@ -402,8 +405,8 @@ stateprobs_g = function(delta, Gamma, allprobs, trackID = NULL,
     
     # if suitable model object is provided, overwrite inputs with model object
     delta = mod$delta
-    # Gamma = mod$Gamma
-    Gamma = mod$Gamma[,, -1] # ignoring first slice
+    Gamma = mod$Gamma
+    # Gamma = mod$Gamma[,, -1] # ignoring first slice
     allprobs = mod$allprobs
     trackID = mod$trackID
   }
@@ -486,7 +489,7 @@ stateprobs_g = function(delta, Gamma, allprobs, trackID = NULL,
     }
     
     if(dim(Gamma)[3] == n){
-      warning("Igoring the first slice of Gamma, as there are only n-1 transitions in a time series of length n.")
+      message("Igoring the first slice of Gamma, as there are only n-1 transitions in a time series of length n.")
       # not using the first slice of Gamma, if n slices are provided
       Gamma = Gamma[,,-1]
     }

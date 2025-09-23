@@ -1022,6 +1022,7 @@ penalty2 = function(re_coef, # coefficient vector/ matrix or list of coefficient
 #' 
 #' Needs to be a named list for a subset of fixed effect parameters or penalty strength parameters. 
 #' For example, if the model has four penalty strength parameters, \code{map[[psname]]} could be \code{factor(c(NA, 1, 1, 2))} to fix the first penalty strength parameter, estimate the second and third jointly, and estimate the fourth separately.
+#' @param silent integer silencing level: 0 corresponds to full printing of inner and outer iterations, 1 to printing of outer iterations only, and 2 to no printing.
 #' @param psname optional name given to the penalty strength parameter in \code{dat}. Defaults to \code{"lambda"}.
 #' @param alpha optional hyperparamater for exponential smoothing of the penalty strengths.
 #'
@@ -1031,14 +1032,14 @@ penalty2 = function(re_coef, # coefficient vector/ matrix or list of coefficient
 #' Increasing this beyond one will lead to a smoother final model. Can be an integer or a vector of length equal to the length of the penalty strength parameter.
 #' @param maxiter maximum number of iterations in the outer optimisation over the penalty strength parameters.
 #' @param tol Convergence tolerance for the penalty strength parameters.
+#' @param method optimisation method to be used by \code{\link[stats:optim]{optim}}. Defaults to \code{"BFGS"}, but might be changed to \code{"L-BFGS-B"} for high-dimensional settings.
 #' @param control list of control parameters for \code{\link[stats:optim]{optim}} to use in the inner optimisation. Here, \code{optim} uses the \code{BFGS} method which cannot be changed.
 #' 
 #' We advise against changing the default values of \code{reltol} and \code{maxit} as this can decrease the accuracy of the Laplace approximation.
-#' # @param method optimisation method to be used by \code{\link[stats:optim]{optim}}. Defaults to \code{"BFGS"}, but might be changed to \code{"L-BFGS-B"} for high-dimensional settings.
-#' @param silent integer silencing level: 0 corresponds to full printing of inner and outer iterations, 1 to printing of outer iterations only, and 2 to no printing.
+#' @param method optimisation method to be used by \code{\link[stats:optim]{optim}}. Defaults to \code{"BFGS"}, but might be changed to \code{"L-BFGS-B"} for high-dimensional settings.
+#' @param conv_crit character, convergence criterion for the penalty strength parameters. Can be \code{"relchange"} (default) or \code{"gradient"}.
 #' @param joint_unc logical, if \code{TRUE}, joint \code{RTMB} object is returned allowing for joint uncertainty quantification
 #' @param saveall logical, if \code{TRUE}, then all model objects from each iteration are saved in the final model object.
-#' # @param epsilon vector of two values specifying the cycling detection parameters. If the relative change of the new penalty strength to the previous one is larger than \code{epsilon[1]} but the change to the one before is smaller than \code{epsilon[2]}, the algorithm will average the two last values to prevent cycling.
 #'
 #' @return model object of class 'qremlModel'. This is a list containing:
 #' \item{...}{everything that is reported inside \code{pnll} using \code{RTMB::REPORT()}. When using \code{forward}, \code{tpm_g}, etc., this may involve automatically reported objects.}
@@ -1103,19 +1104,41 @@ qreml <- function(pnll, # penalized negative log-likelihood function
                   dat, # initial dat object, currently needs to be called dat!
                   random, # names of parameters in par that are random effects/ penalized
                   map = NULL, # map for fixed effects
+                  silent = 1, # print level
                   psname = "lambda", # name given to the psname parameter in dat
                   alpha = 0.3, # exponential smoothing parameter
                   smoothing = 1,
                   maxiter = 100, # maximum number of iterations
                   tol = 1e-4, # tolerance for convergence
-                  control = list(reltol = 1e-10, maxit = 1000), # control list for inner optimization
-                   # method = "BFGS", # optimization method used by optim
-                  silent = 1, # print level
-                  joint_unc = TRUE, # should joint object be returned?
-                  saveall = FALSE)# , # save all intermediate models?
-                  # cycling_threshold = 100) # cycling detection threshold
+                  method = "BFGS", # optimization method used by optim
+                  control = list(), # control list for inner optimization
+                  conv_crit = "relchange",
+                  joint_unc = FALSE, # should joint object be returned?
+                  saveall = FALSE # save all intermediate models?
+                  )
 {
-  method <- "BFGS"
+  ### input checking arguments
+  if(!is.function(pnll)){
+    stop("pnll needs to be a function")
+  }
+  if(!conv_crit %in% c("gradient", "relchange")){
+    stop("'conv_crit' needs to be either 'gradient' or 'relchange'")
+  }
+  if(!is.list(par)){
+    stop("'par' needs to be a named list")
+  }
+  if(!is.list(dat)){
+    stop("'dat' needs to be a named list")
+  }
+  if(!psname %in% names(dat)){
+    stop(paste0("'dat' needs to contain a vector called '", psname, "' with initial penalty strengths"))
+  }
+  if(!is.character(random) || length(random) < 1){
+    stop("'random' needs to be a character vector of names of random effects in 'par'")
+  }
+  if(!is.null(map) && !is.list(map)){
+    stop("'map' needs to be a named list of factors for fixed effects or penalty strength parameters")
+  }
   
   # setting the argument name for par because later updated par is returned
   argname_par <- as.character(substitute(par))
@@ -1143,7 +1166,7 @@ qreml <- function(pnll, # penalized negative log-likelihood function
     
     # defining function that grabs lambda
     getLambda <- function(x) lambda
-    # grab lambda
+    # grab lambda from outside
     dat[[psname]] <- DataEval(getLambda, rep(advector(1), 0))
     
     # assigning dat to whatever it is called in pnll() (hopefully)
@@ -1151,11 +1174,6 @@ qreml <- function(pnll, # penalized negative log-likelihood function
     
     pnll(par)
   }
-  
-  # creating the RTMB objective function
-  if(silent %in% 0:1){
-    cat("Creating AD function\n")
-  } 
   
   ## mapping
   # map can contain fixed effects -> just passed to MakeADFun
@@ -1166,17 +1184,10 @@ qreml <- function(pnll, # penalized negative log-likelihood function
       msg <- "'map' cannot contain random effects or spline parameters"
       stop(msg)
     }
-    # make factor if not
-    # if(!all(sapply(map, is.factor))){
-    #   message("Converting map to factor")
-    # }
     map <- lapply(map, factor)
-    # if there is mapping but no psname map, add psname map
-    if(is.null(map[[psname]])){
-      map[[psname]] = factor(seq_along(lambda))
-    }
-  } else {
-    # initialises a list only having named element psname
+  }
+  # if there is mapping but no psname map, add psname map
+  if(is.null(map[[psname]])){
     map[[psname]] = factor(seq_along(lambda))
   }
   # separate out psname map
@@ -1199,6 +1210,8 @@ qreml <- function(pnll, # penalized negative log-likelihood function
   }
   Lambda_mapped <- matrix(lambda_mapped, nrow = 1, ncol = length(lambda_mapped))
   
+  # creating the RTMB objective function
+  if(silent %in% 0:1) cat("Creating AD function\n")
   obj <- MakeADFun(func = f, 
                    parameters = par, 
                    silent = TRUE,
@@ -1206,22 +1219,26 @@ qreml <- function(pnll, # penalized negative log-likelihood function
   
   newpar <- obj$par # saving initial parameter value as vector to initialize optimization in loop
   
-  # own printing of maximum gradient component if silent = 0
-  # gradcounter <- 1
-  # if(silent == 0){
-  #   newgrad <- function(par){
-  #     gr <- obj$gr(par)
-  #     if(gradcounter %% 10 == 0){
-  #       iter <- gradcounter / 10
-  #       cat("  iter:", iter, "-", "inner mgc:", max(abs(gr)), "\n")
-  #     }
-  #     gradcounter <<- gradcounter + 1
-  #     gr
-  #   }
-  # } else{
-  #   newgrad <- obj$gr
-  # }
-  newgrad <- obj$gr
+  # gradient printing
+  counter_env <- new.env() # create environment to hold a counter
+  counter_env$count <- 0 # initialise with zero
+  if(silent == 0){
+    ctREPORT <- 10 # by default, report every 10 calls
+    if(!is.null(control$REPORT)){
+      ctREPORT <- control$REPORT # if report is changed, use that
+      control$REPORT <- NULL # remove REPORT from control to avoid problems with optim
+    }
+    
+    newgrad <- function(par){
+      counter_env$count <- counter_env$count + 1
+      ct <- counter_env$count
+      gr <- obj$gr(par)
+      if(ct %% ctREPORT == 0) cat("iter", ct, "- inner mgc:", round(max(abs(gr)), 5), "\n")
+      gr
+    }
+  } else{
+    newgrad <- obj$gr
+  }
   
   # prepwork -> running reporting to get necessary quantities
   mod0 <- obj$report() # getting all necessary information from penalty report
@@ -1249,21 +1266,14 @@ qreml <- function(pnll, # penalized negative log-likelihood function
       }
     }
     
-    re_inds[[i]] <- matrix(which(names(obj$par) == random[i]), 
-                           nrow = re_dim[1], ncol = re_dim[2])
+    re_inds[[i]] <- matrix(which(names(obj$par) == random[i]), nrow = re_dim[1], ncol = re_dim[2])
     if(byrow) re_inds[[i]] <- t(re_inds[[i]]) # if byrow, then transpose
   }
   
   ## find how many penalty strength pars are needed for ecah random effect
   # 1: univariate smooth
   # >1: tensorproduct
-  n_penalties <- sapply(S, function(x){
-    if(is.matrix(x)){
-      return(1)
-    } else{
-      return(length(x))
-    }
-  })
+  n_penalties <- sapply(S, function(x) if(is.matrix(x)) 1 else length(x))
   
   ## Compte indices of simple univariate smooths and of tensorproduct smooths
   simple_ind <- which(n_penalties == 1)
@@ -1296,48 +1306,111 @@ qreml <- function(pnll, # penalized negative log-likelihood function
   }
   lambda_names <- names(unlist(Lambdas[[1]]))
   
-  if(silent < 2){
-    cat("Initialising with", paste0(psname, ":"), round(lambda, 3), "\n")
-  }
+  if(silent < 2) cat("Initialising with", paste0(psname, ":"), round(lambda, 3), "\n")
   
   # Computing ranks of penalty matrices for simple_ind
-  ranks <- sapply(S, function(x){
-    if(is.matrix(x)) Matrix::rankMatrix(x) else NA
-  })
+  ranks <- sapply(S, function(x) if(is.matrix(x)) Matrix::rankMatrix(x) else NA)
+  
+  # locally define function to construct full penalty matrix from lambdas
+  build_bigS <- function(lambdas) {
+    bigS <- matrix(0, length(newpar), length(newpar))
+    for(i in seq_len(n_re)){
+      for(j in seq_len(nrow(re_inds[[i]]))){
+        idx <- re_inds[[i]][j,]
+        if(i %in% simple_ind){ # if simple smooth: just lambda_i * S_i
+          bigS[idx, idx] <- lambdas[[i]][j] * S[[i]]
+        } else { # if tensor product, we have a sum at these indices
+          n_pen <- length(S[[i]])
+          for(pen in 1:n_pen){ 
+            bigS[idx, idx] <- bigS[idx, idx] + lambdas[[i]][(j-1) * n_pen + pen] * S[[i]][[pen]]
+          }
+        }
+      }
+    }
+    bigS
+  }
+  
+  # define restricted likelihood function
+  restr_llk <- function(lp_opt, bigS, J) {
+    lp_opt + gdeterminant(bigS) / 2 - gdeterminant(J) / 2
+  }
+  llk_r <- numeric(maxiter) # restricted likelihood vector
   
   # initialising convergence check index (initially for all lambdas)
   convInd <- seq_along(lambda_mapped)
+  convInd_unmapped <- seq_along(lambda) # for unmapped lambdas
   
   # controlling optim printing
-  if(silent == 0){
-    if(is.null(control$trace)){
-      control$trace = 1
-    } 
-    if(is.null(control$REPORT)){
-      control$REPORT = 10
-    }
-  }
-  # if custom control is provided but either of these is missing, set to default
-  if(is.null(control$reltol)) control$reltol <- 1e-10
-  if(is.null(control$maxit)) control$maxit <- 1000
+  ctl <- list(maxit = 1000)
+  ctl[names(control)] <- control # overwriting with user-provided control parameters
+  # if(silent == 0) ctl$trace = 1 else ctl$trace = 0 # setting trace to 1 if silent == 0, otherwise 0
+  if(method == "BFGS") ctl$reltol <- 1e-10
+  if(method == "L-BFGS-B") ctl$maxit <- 5000 # L-BFGS-B takes smaller steps
   
   ### updating algorithm
   # loop over outer iterations until convergence or maxiter
   for(k in seq_len(maxiter)){
     
+    # set inner gradient counter to zero
+    counter_env$count <- 0
+    
     # fitting the model conditional on lambda: current local lambda will be pulled by f
-    # gradcounter <- 1
-    if(silent == 0){
-      cat("\nInner optimisation:", "\n")
-    }
+    if(silent == 0) cat("\nInner optimisation:", "\n")
     opt <- stats::optim(newpar, obj$fn, newgrad, 
-                        method = method, hessian = TRUE, # return hessian in the end
-                        control = control)
+                        method = method,
+                        control = ctl)
     
     gr <- obj$gr(opt$par)
     if(silent == 0){
-      cat("final inner mgc:", max(abs(gr)), "\n")
+      cat("iter", counter_env$count, "- inner mgc:", round(max(abs(gr)), 5), "\n")
     }
+    
+    # evaluating current penalised Hessian
+    if(silent == 0) cat("evaluating Hessian...\n")
+    J <- stats::optimHess(opt$par, obj$fn, obj$gr)
+    J <- (J + t(J))/2 # force symmetric
+    
+    # build big penalty matrix from current lambdas
+    bigS <- build_bigS(Lambdas[[k]])
+    bigS <- (bigS + t(bigS)) / 2 # force symmetric 
+    
+    H <- J + bigS # Hessian = J + S_lambda
+    # H <- (H + t(H)) / 2 # force symmetric Hessian
+    
+    # R <- tryCatch(chol(H), error = function(e) NULL)
+    # if (is.null(R)) {
+    #   if(silent == 0) cat("stabilising Hessian for inversion\n")
+    #   eps <- 1e-8 * mean(diag(H))
+    #   H <- H + diag(eps, nrow(H))
+    #   R <- chol(H)
+    # }
+    H_inv <- safe_chol_inv(H) # chol2inv(R)
+    
+    # rebuild penalised Hessin pd for inversion
+    J_pd <- H - bigS
+    
+    # # check if positive definite
+    # if(!is.positive.definite(H)) {
+    #   if(silent == 0) cat("replacing Hessian with nearest PD\n")
+    #   H <- nearPD(H)$mat # if not, find nearest PD matrix
+    # }
+    
+    # inverting current Hessian
+    # try Cholesky
+    # R <- tryCatch(chol(J_pd), error = function(e) NULL)
+    # 
+    # if (is.null(R)) {
+    #   # not PD -> jitter
+    #   eps <- 1e-8 * mean(diag(J_pd))
+    #   J_pd <- J_pd + diag(eps, nrow(J_pd))
+    #   R <- chol(J_pd)  # now must succeed
+    # }
+    
+    # compute inverse
+    J_inv <- safe_chol_inv(J_pd) # chol2inv(R)
+
+    # J_inv <- tryCatch(solve(J_pd), error = function(e) NULL)
+    # if(is.null(J_inv)) J_inv <- MASS::ginv(J_pd) # if problem, pseudo-inverse
     
     # setting new optimum par for next iteration
     newpar <- opt$par 
@@ -1345,16 +1418,13 @@ qreml <- function(pnll, # penalized negative log-likelihood function
     # reporting to extract penalties
     mod <- obj$report() 
     
-    # evaluating current (approximate) Hessian
-    J <- opt$hessian
-    
-    # inverting current Hessian - ginv is more stable
-    J_inv <- MASS::ginv(J) 
-    
     # saving entire model object
     if(saveall){
       allmods[[k]] <- mod
     }
+    
+    ## calculating restricted likelihood
+    llk_r[k] <- restr_llk(-opt$value, bigS, J)
     
     ### Updating all lambdas ###
     
@@ -1373,14 +1443,10 @@ qreml <- function(pnll, # penalized negative log-likelihood function
         for(j in 1:nrow(re_inds[[i]])){
           # indices of this random effect
           idx <- re_inds[[i]][j,]
-          
-          # effective degrees of freedom for this random effect: J^-1_p J
+          # effective degrees of freedom for this random effect
           edoF[l] <- ranks[i] - Lambdas[[k]][[i]][j] * sum(rowSums(J_inv[idx, idx] * S[[i]])) # trace(J^-1 \lambda S)
-          # edoF[l] = Lambdas[[k]][[i]][j] * (ranks[i] - sum(rowSums(J_inv[idx, idx] * S[[i]]))) # trace(J^-1 \lambda S)
-          
           # quadratic penalty: b^t S b
           pens[l] <- mod$Pen[[i]][j]
-          
           l <- l+1
         }
         
@@ -1393,13 +1459,14 @@ qreml <- function(pnll, # penalized negative log-likelihood function
         for(j in 1:nrow(re_inds[[i]])){
           # indices of this random effect
           idx <- re_inds[[i]][j,]
-          
+          # extracting old penalty strengths
           oldlambda <- Lambdas[[k]][[i]][(j-1) * n_pen + 1:n_pen]
           
           # effective degrees of freedom for this random effect
           # calculate (lambda_1* S_1 + ... + lambda_{n_pen} S_{n_pen})^-1
-          thisS <- oldlambda[1] * S[[i]][[1]]
-          for(pen in 2:n_pen) thisS <- thisS + oldlambda[pen] * S[[i]][[pen]]
+          thisS <- bigS[idx, idx] # extract submatrix of bigS for this random effect
+          # thisS <- oldlambda[1] * S[[i]][[1]]
+          # for(pen in 2:n_pen) thisS <- thisS + oldlambda[pen] * S[[i]][[pen]]
           thisS_inv <- MASS::ginv(thisS) # Moore-Penrose pseudo-inverse via SVD
           
           edoFs <- numeric(n_pen)
@@ -1410,7 +1477,7 @@ qreml <- function(pnll, # penalized negative log-likelihood function
           }
           edoF[l : (l + n_pen - 1)] <- edoFs
           
-          # quadratic penalty: b^t S b
+          # quadratic penalty: b^t S b, this is reported by penalty2()
           pens[l : (l + n_pen - 1)] <- mod$Pen[[i]][[j]]
           
           l <- l + n_pen
@@ -1435,17 +1502,6 @@ qreml <- function(pnll, # penalized negative log-likelihood function
       
       # gradient
       outer_gr[i] <- -0.5 * this_pen + 1 / (2 * lambda_mapped[i]) * this_edoF
-      
-      # check for cycling behaviour
-      # if(k > 2){
-      #   if(abs((lambdas_k[[i]][j] - Lambdas[[k-1]][[i]][j]) / Lambdas[[k-1]][[i]][j]) < epsilon[1] & # change to lambda_t-2 is small
-      #      abs((lambdas_k[[i]][j] - Lambdas[[k]][[i]][j]) / Lambdas[[k]][[i]][j]) > epsilon[2]) # but change to lambda_t-1 is large
-      #   {
-      #     cat("Cycling detected - averaging for faster convergence\n")
-      #     # replacing with mean to prevent cycling
-      #     lambdas_k[[i]][j] = (lambdas_k[[i]][j] + Lambdas[[k]][[i]][j]) / 2
-      #   }
-      # }
     }
     
     # potentially set lambdas to "working infinity"
@@ -1453,15 +1509,6 @@ qreml <- function(pnll, # penalized negative log-likelihood function
     
     # save current lambda_mapped
     Lambda_mapped <- rbind(Lambda_mapped, lambda_mapped)
-    
-    # cycling check
-    # if(k > 15){
-    #   cycling <- detect_cycling(Lambda_mapped, cycling_threshold)
-    #   if(cycling){
-    #     cat("Cycling detected - reducing step size\n")
-    #     alpha <- 1 - 0.9 * (1 - alpha)
-    #   }
-    # }
     
     # unmap lambda
     lambdas_k <- unmap_lambda(lambda_mapped, lambda_map, lambda0)
@@ -1481,6 +1528,7 @@ qreml <- function(pnll, # penalized negative log-likelihood function
     
     if(k > 3){ # after 2 iterations, check whether any lambda > 1e5 and exclude from check
       convInd <- which(lambda_mapped <= 1e6)
+      convInd_unmapped <- which(lambda <= 1e6) # indices of unmapped lambdas
     }
     
     mgc <- max(abs(outer_gr[convInd]))
@@ -1489,8 +1537,6 @@ qreml <- function(pnll, # penalized negative log-likelihood function
       if(silent == 0) cat("\n")
       cat("outer", k, "-", paste0(psname, ":"), round(lambda, 3), "\n")
       if(silent == 0){
-        #   cat("  gradient:", outer_gr, "\n")
-        # } else{
         cat("outer mgc:", mgc, "\n")
       }
       
@@ -1500,16 +1546,24 @@ qreml <- function(pnll, # penalized negative log-likelihood function
       }
     }
     
-    # convergence check
-    # if(all(abs(lambda - unlist(Lambdas[[k]])) / unlist(Lambdas[[k]])) < tol)){
-    # if(max(abs(
-    #   (lambda - unlist(Lambdas[[k]]))[convInd] / unlist(Lambdas[[k]])[convInd]
-    # )) < tol){
-    if(k >= 5 & (mgc < tol | opt$counts[2] <= 3)){
-      if(silent < 2){
-        cat("Converged\n")
+    #### convergence check ####
+    if(conv_crit == "gradient"){
+      if(k > 3 & (mgc < tol | opt$counts[2] < 3)) {
+        if(silent < 2){
+          cat("Converged\n")
+        }
+        break
       }
-      break
+    } else{
+      # relative change of lambda
+      rel_change <- abs((lambda - unlist(Lambdas[[k]])) / unlist(Lambdas[[k]]))
+      
+      if(k > 3 & (all(rel_change[convInd_unmapped] < tol)) | opt$counts[2] < 3) {
+        if(silent < 2){
+          cat("Converged\n")
+        }
+        break
+      }
     }
     
     if(k == maxiter){
@@ -1532,19 +1586,17 @@ qreml <- function(pnll, # penalized negative log-likelihood function
     }
   }
   
-  # fitting the model conditional on lambda: current local lambda will be pulled by f
-  # gradcounter <- 1
+  # fitting the model conditional on final lambda
   opt <- stats::optim(newpar, obj$fn, newgrad, 
-                      method = method, hessian = TRUE, # return hessian in the end
+                      method = method, hessian = FALSE, # return hessian in the end
                       control = control)
+  
+  J <- stats::optimHess(opt$par, obj$fn, obj$gr)
   
   if(silent == 0){
     gr = obj$gr(opt$par)
-    cat("final inner mgc:", max(abs(gr)), "\n")
+    cat("final inner maximum gradient component:", round(max(abs(gr)), 5), "\n")
   }
-  
-  # setting new optimum par for next iteration
-  # newpar <- opt$par 
   
   # reporting to extract penalties
   mod <- obj$report() 
@@ -1554,7 +1606,7 @@ qreml <- function(pnll, # penalized negative log-likelihood function
   llk <- pllk + mod$pen
   
   # evaluating current Hessian
-  J <- opt$hessian
+  # J <- opt$hessian
   
   # computing inverse Hessian
   J_inv <- MASS::ginv(J) 
@@ -1576,7 +1628,6 @@ qreml <- function(pnll, # penalized negative log-likelihood function
   
   # assign gradient function
   mod$outer_gr <- function(x){
-    
     lambda <- unmap_lambda(x, lambda_map, lambda0)
     Lambda <- reshape_lambda(lambda_lengths, lambda)
     
@@ -1587,11 +1638,6 @@ qreml <- function(pnll, # penalized negative log-likelihood function
     inner_opt <- stats::optim(newpar, obj$fn, newgrad,
                               method = method, hessian = TRUE, # return hessian in the end
                               control = control)
-    if(silent == 0){
-      gr <- obj$gr(inner_opt$par)
-      cat("final inner mgc:", max(abs(gr)), "\n")
-    }
-    # setting new optimum par for next iteration
     thismod <- obj$report(inner_opt$par)
     J <- inner_opt$hessian
     J_inv <- MASS::ginv(J)
@@ -1661,14 +1707,9 @@ qreml <- function(pnll, # penalized negative log-likelihood function
   # assigning all lambdas to return object
   mod[[paste0("all_", psname)]] <- Lambdas
   
-  # calculating unpenalized log-likelihood at final parameter values
-  # lambda <- rep(0, length(lambda))
-  # dat[[psname]] <- lambda
-  
   # format parameter to list
   parlist <- obj$env$parList(opt$par)
   mod[[argname_par]] <- parlist # and assing to return object
-  
   mod[[paste0("relist_", argname_par)]] <- obj$env$parList
   mod[[paste0("map_", psname)]] <- function(lambda) map_lambda(lambda, lambda_map)
   mod$psname <- psname
@@ -1686,39 +1727,12 @@ qreml <- function(pnll, # penalized negative log-likelihood function
   
   # number of fixed parameters
   mod$n_fixpar <- length(unlist(par[!(names(par) %in% random)]))
-  # mod$n_fixpar = length(opt$par)
-  
-  ## calculating effective degrees of freedom for final model
-  # mod$edf = list()
-  # l = 1
-  # for(i in 1:n_re){
-  #   edoF_i = numeric(nrow(re_inds[[i]]))
-  #   for(j in 1:nrow(re_inds[[i]])){
-  #     # idx = re_inds[[i]][j,]
-  #     # edoF_i[j] = nrow(S[[i]]) - Lambdas[[k]][[i]][j] * sum(rowSums(J_inv[idx, idx] * S[[i]]))
-  #     
-  #   }
-  #   mod$edf[[i]] = edoF_i
-  # }
-  # this is probaly not correct
   
   ## compute effective degrees of freedom for each smooth (diag(J_p^-1 J))
   # building the entire model penalty matrix to compute J_0 = J_p - S
   # S_lambda = \sum_i lambda_i S_i padded out with zeros
-  bigS <- matrix(0, nrow(J), ncol(J))
-  for(i in seq_len(n_re)){
-    for(j in seq_len(nrow(re_inds[[i]]))){
-      idx <- re_inds[[i]][j,]
-      if(i %in% simple_ind){ # if simple smooth: just lambda_i * S_i
-        bigS[idx, idx] <- Lambdas[[k+1]][[i]][j] * S[[i]]
-      } else { # if tensor product, we have a sum at these indices
-        n_pen <- length(S[[i]])
-        for(pen in 1:n_pen){ 
-          bigS[idx, idx] <- bigS[idx, idx] + Lambdas[[k+1]][[i]][(j-1) * n_pen + pen] * S[[i]][[pen]]
-        }
-      }
-    }
-  }
+  bigS <- build_bigS(Lambdas[[k+1]])
+  
   leading_diag <- rowSums(J_inv * (J - bigS)) # computes diag(J_inv %*% (J - bigS)) more efficiently (only diagonal terms)
   Edfs <- Lambdas[[k+1]] # copy names from Lambdas if present
   for(i in seq_len(n_re)){
@@ -1737,6 +1751,9 @@ qreml <- function(pnll, # penalized negative log-likelihood function
   # assing conditinoal Hessian
   mod$Hessian_conditional <- J
   
+  # assigning restriced likelihood
+  mod$llk_restricted <- llk_r[1:k]
+  
   # removing unnecessary elements that are only reported for qreml
   mod <- mod[!names(mod) %in% c("Pen", "pen", "S")] 
   
@@ -1744,9 +1761,6 @@ qreml <- function(pnll, # penalized negative log-likelihood function
     if(joint_unc){
       ### constructing joint object
       parlist$loglambda <- log(mod[[psname]])
-      
-      # finding the number of similar random effects for each random effect
-      # indvec = rep(1:n_re, times = re_lengths)
       
       # computing log determinants
       logdetS <- numeric(length(S))
@@ -1803,11 +1817,9 @@ qreml <- function(pnll, # penalized negative log-likelihood function
       mod$obj_joint <- obj_joint
     }
   } 
-  # else{
-  #   if(joint_unc){
-  #     message("Joint uncercainty is currently not possible for models involving tensor products.")
-  #   }
-  # }
+
+  # clean up - may not be necessary
+  gc()
   
   class(mod) = "qremlModel"
   return(mod)
@@ -2044,3 +2056,59 @@ sdreport_outer <- function(mod, invert = FALSE){
 #   return(any(cycling_flags))
 # }
 
+
+#' Penalty approximation of unimodality constraints for univariates smooths
+#'
+#' @param coef coefficient vector of matrix on which to apply the unimodality penalty
+#' @param m vector of indices for the position of the coefficient mode. 
+#' If \code{coef} is a vector, must be of length 1. Otherwise, must be of length equal to nrow(coef)
+#' @param kappa global scaling factor for the penalty
+#' @param concave logical; if \code{TRUE} (default), the penalty enforces increasing until the mode then decreasing. If the coefficients should decrease until the mode, then increase, set \code{concave = FALSE}.
+#' @param rho control parameter for smooth approximation to \code{min(x, 0)} used internally. 
+#' For large values, gets closer to true minimum function but less stable. 
+#'
+#' @returns a numeric value of the penalty for the given coefficients
+#' @export
+#'
+#' @examples
+#' ## coefficient vector
+#' coef <- c(1, 2, 3, 2, 1)
+#' # mode at position 3
+#' penalty_uni(coef, m = 3) # basically zero
+#' #' # mode at position 2
+#' penalty_uni(coef, m = 2) # large positive penalty
+#' 
+#' ## coefficient matrix
+#' coef <- rbind(coef, coef)
+#' m <- c(1, 4)
+#' penalty_uni(coef, m)
+penalty_uni <- function(coef, 
+                        m, 
+                        kappa = 1e3, 
+                        concave = TRUE,
+                        rho = 20) {
+  
+  N <- length(m) # number of states
+  if(is.null(dim(coef))){
+    coef <- matrix(coef, nrow = 1, ncol = length(coef))
+  }
+  
+  if(nrow(coef) != N) {
+    stop("Coefficient matrix must have as many rows as there are states.")
+  }
+  k <- ncol(coef) + 1 # number of coefficients
+  
+  if(!concave) coef <- -coef # if concave == FALSE, flip coefficients to get convexity penalty
+  
+  # set up constraint matrices
+  C <- construct_C(m, k, exclude_last = TRUE)
+  
+  # compute penalty by summing over states
+  pen <- 0
+  for(i in 1:N) {
+    pen <- pen - sum(min0_smooth(C[[i]] %*% coef[i,], rho = rho))
+  }
+  
+  # return result scaled by kappa
+  kappa * pen
+}

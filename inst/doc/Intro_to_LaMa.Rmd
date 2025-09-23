@@ -27,7 +27,7 @@ library(LaMa)
 
 The `R` package `LaMa` provides convenient functions for fitting a variety of **latent Markov models** [@mews2024build], including **hidden Markov models** (HMMs), **hidden semi-Markov models** (HSMMs), **state space models** (SSMs) and **continuous-time** variants via **direct numerical maximum likelihood estimation**. The core idea is that the user defines their own negative log-likelihood function for numerical optimisation, but can rely on package functions for convenience and speed. 
 
-The main families of functions are `forward`, `tpm` and `stationary` and we showcasse the simplest versions in the following introductory example.
+The main families of functions are `forward`, `tpm` and `stationary` and we showcase the simplest versions in the following introductory example.
 
 ## Introductory example: Homogeneous HMM
 
@@ -177,14 +177,13 @@ pres = pseudo_res(x, # observations
                   list(mean = mu, sd = sigma), # parameters for that distribution
                   probs) # local state probabilities
 
-oldpar = par(mfrow = c(1,2))
-hist(pres, prob = TRUE, bor = "white")
-curve(dnorm(x), lty = 2, add = TRUE)
-qqnorm(pres, pch = 16, col = "#00000020", bty = "n")
-qqline(pres, col = "orange")
-par(oldpar)
+# use the plotting method for LaMaResiduals
+plot(pres, hist = TRUE)
 ```
 
 In this case, our model looks really good -- as it should as we simulated from the exact same model.
+
+> Continue reading with [**LaMa and RTMB**](https://janoleko.github.io/LaMa/articles/LaMa_and_RTMB.html), [**Inhomogeneous HMMs**](https://janoleko.github.io/LaMa/articles/Inhomogeneous_HMMs.html), [**Periodic HMMs**](https://janoleko.github.io/LaMa/articles/Periodic_HMMs.html), [**Longitudinal data**](https://janoleko.github.io/LaMa/articles/Longitudinal_data.html), [**State-space models**](https://janoleko.github.io/LaMa/articles/State_space_models.html), [**Hidden semi-Markov models**](https://janoleko.github.io/LaMa/articles/HSMMs.html), or [**Continuous-time HMMs**](https://janoleko.github.io/LaMa/articles/Continuous_time_HMMs.html).
+
 
 ## References

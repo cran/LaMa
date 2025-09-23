@@ -49,8 +49,9 @@ overflow: visible;
 }
 </style>
 <style type="text/css" data-origin="pandoc">
+html { -webkit-text-size-adjust: 100%; }
 pre > code.sourceCode { white-space: pre; position: relative; }
-pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
 pre > code.sourceCode > span:empty { height: 1.2em; }
 .sourceCode { overflow: visible; }
 code.sourceCode > span { color: inherit; text-decoration: inherit; }
@@ -61,7 +62,7 @@ div.sourceCode { overflow: auto; }
 }
 @media print {
 pre > code.sourceCode { white-space: pre-wrap; }
-pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
 }
 pre.numberSource code
 { counter-reset: source-line 0; }
@@ -367,8 +368,9 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 <blockquote>
 <p>Before diving into this vignette, we recommend reading the vignettes
-<strong>Introduction to LaMa</strong> and <strong>Inhomogeneous
-HMMs</strong>.</p>
+<a href="https://janoleko.github.io/LaMa/articles/Intro_to_LaMa.html"><strong>Introduction
+to LaMa</strong></a> and <a href="https://janoleko.github.io/LaMa/articles/Inhomogeneous_HMMs.html"><strong>Inhomogeneous
+HMMs</strong></a>.</p>
 </blockquote>
 <p>This vignette shows how to fit HMMs where the state process is a
 periodically inhomogeneous Markov chain. Formally, this means that for
@@ -472,7 +474,7 @@ that specifies which time point to compute.</p>
 <span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a>  mod <span class="ot">&lt;-</span> <span class="fu">nlm</span>(nll, par, <span class="at">x =</span> x, <span class="at">tod =</span> tod)</span>
 <span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a>)</span>
 <span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a><span class="co">#&gt;   0.454   0.023   0.476</span></span></code></pre></div>
+<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a><span class="co">#&gt;   0.597   0.019   0.617</span></span></code></pre></div>
 </div>
 <div id="visualising-results" class="section level3">
 <h3>Visualising results</h3>
@@ -552,6 +554,11 @@ calculated using <code>tpm_g()</code> or <code>tpm_p()</code>:</p>
 <span id="cb12-6"><a href="#cb12-6" tabindex="-1"></a><span class="co"># constructing t.p.m.s</span></span>
 <span id="cb12-7"><a href="#cb12-7" tabindex="-1"></a>Gamma <span class="ot">=</span> <span class="fu">tpm_p</span>(<span class="at">Z =</span> Z, <span class="at">beta =</span> beta) <span class="co"># not first arguments in tpm_p</span></span>
 <span id="cb12-8"><a href="#cb12-8" tabindex="-1"></a>Gamma <span class="ot">=</span> <span class="fu">tpm_g</span>(Z, beta) <span class="co"># but first arguments in tpm_g</span></span></code></pre></div>
+<blockquote>
+<p>Continue reading with <a href="https://janoleko.github.io/LaMa/articles/LaMa_and_RTMB.html"><strong>LaMa
+and RTMB</strong></a> or <a href="https://janoleko.github.io/LaMa/articles/Penalised_splines.html"><strong>Penalised
+splines</strong></a>.</p>
+</blockquote>
 <!-- ## Nonparametric modeling of the transition probalities -->
 <!-- `Lcpp` also makes non-parametric modeling trivially easy. Here we model the transition probabilities using cyclic P-splines similar to @feldmann2023. We do so in first calculating the design matrix using `mgcv` which we can easily be handled by `tpm_p()`. -->
 <!-- ### Building the cyclic spline design matrix -->

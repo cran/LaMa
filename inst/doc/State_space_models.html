@@ -49,8 +49,9 @@ overflow: visible;
 }
 </style>
 <style type="text/css" data-origin="pandoc">
+html { -webkit-text-size-adjust: 100%; }
 pre > code.sourceCode { white-space: pre; position: relative; }
-pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
 pre > code.sourceCode > span:empty { height: 1.2em; }
 .sourceCode { overflow: visible; }
 code.sourceCode > span { color: inherit; text-decoration: inherit; }
@@ -61,7 +62,7 @@ div.sourceCode { overflow: auto; }
 }
 @media print {
 pre > code.sourceCode { white-space: pre-wrap; }
-pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
 }
 pre.numberSource code
 { counter-reset: source-line 0; }
@@ -367,7 +368,8 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 <blockquote>
 <p>Before diving into this vignette, we recommend reading the vignette
-<strong>Introduction to LaMa</strong>.</p>
+<a href="https://janoleko.github.io/LaMa/articles/Intro_to_LaMa.html"><strong>Introduction
+to LaMa</strong></a>.</p>
 </blockquote>
 <p>This vignette shows how to fit state-space models which can be
 interpreted as generalisation of HMMs to continuous state spaces.
@@ -458,7 +460,7 @@ likelihood with a large number of states.</p>
 <span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a>  mod <span class="ot">&lt;-</span> <span class="fu">nlm</span>(nll, par, <span class="at">y =</span> y, <span class="at">bm =</span> bm, <span class="at">m =</span> m)</span>
 <span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a>)</span>
 <span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a><span class="co">#&gt;   0.663   0.014   0.677</span></span></code></pre></div>
+<span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a><span class="co">#&gt;   0.748   0.015   0.764</span></span></code></pre></div>
 </div>
 <div id="results" class="section level3">
 <h3>Results</h3>

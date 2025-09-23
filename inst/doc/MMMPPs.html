@@ -49,8 +49,9 @@ overflow: visible;
 }
 </style>
 <style type="text/css" data-origin="pandoc">
+html { -webkit-text-size-adjust: 100%; }
 pre > code.sourceCode { white-space: pre; position: relative; }
-pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
 pre > code.sourceCode > span:empty { height: 1.2em; }
 .sourceCode { overflow: visible; }
 code.sourceCode > span { color: inherit; text-decoration: inherit; }
@@ -61,7 +62,7 @@ div.sourceCode { overflow: auto; }
 }
 @media print {
 pre > code.sourceCode { white-space: pre-wrap; }
-pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
 }
 pre.numberSource code
 { counter-reset: source-line 0; }
@@ -368,8 +369,9 @@ processes</h1>
 
 <blockquote>
 <p>Before diving into this vignette, we recommend reading the vignettes
-<strong>Introduction to LaMa</strong> and <strong>Continuous-time
-HMMs</strong>.</p>
+<a href="https://janoleko.github.io/LaMa/articles/Intro_to_LaMa.html"><strong>Introduction
+to LaMa</strong></a> and <a href="https://janoleko.github.io/LaMa/articles/Continuous_time_HMMs.html"><strong>Continuous-time
+HMMs</strong></a>.</p>
 </blockquote>
 <p><code>LaMa</code> can also be used to fit so-called
 <strong>Markov-modulated Poisson processes</strong>. These are doubly
@@ -482,7 +484,7 @@ state-dependent density matrices to be <span class="math inline">\(\Lambda\)</sp
 <span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a>  mod <span class="ot">&lt;-</span> <span class="fu">nlm</span>(nll, par, <span class="at">timediff =</span> timediff, <span class="at">N =</span> <span class="dv">2</span>, <span class="at">stepmax =</span> <span class="dv">10</span>)</span>
 <span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a>)</span>
 <span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a><span class="co">#&gt;   0.076   0.001   0.077</span></span>
+<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a><span class="co">#&gt;   0.085   0.001   0.087</span></span>
 <span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a><span class="co"># we often need the stepmax, as the matrix exponential can be numerically unstable</span></span></code></pre></div>
 </div>
 <div id="results" class="section level3">
@@ -611,7 +613,7 @@ rates.</p>
 <span id="cb12-8"><a href="#cb12-8" tabindex="-1"></a>  mod2 <span class="ot">&lt;-</span> <span class="fu">nlm</span>(nllMark, par, <span class="at">y =</span> marks, <span class="at">timediff =</span> timediff, <span class="at">N =</span> <span class="dv">3</span>, <span class="at">stepmax =</span> <span class="dv">5</span>)</span>
 <span id="cb12-9"><a href="#cb12-9" tabindex="-1"></a>)</span>
 <span id="cb12-10"><a href="#cb12-10" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb12-11"><a href="#cb12-11" tabindex="-1"></a><span class="co">#&gt;   0.582   0.012   0.599</span></span></code></pre></div>
+<span id="cb12-11"><a href="#cb12-11" tabindex="-1"></a><span class="co">#&gt;   0.630   0.015   0.673</span></span></code></pre></div>
 </div>
 <div id="results-1" class="section level3">
 <h3>Results</h3>
