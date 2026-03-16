@@ -26,14 +26,14 @@ set.seed(123)
 
 k = 200 # number of state switches
 trans_times = s = rep(NA, k) # time points where the chain transitions
-s[1] = sample(1:2, 1) # initial distribuion c(0.5, 0.5)
+s[1] = sample(1:2, 1) # initial distribution c(0.5, 0.5)
 # exponentially distributed waiting times
 trans_times[1] = rexp(1, -Q[s[1],s[1]])
 n_arrivals = rpois(1, trans_times[1])
 obs_times = sort(runif(n_arrivals, 0, trans_times[1]))
 x = rnorm(n_arrivals, mu[s[1]], sigma[s[1]])
 for(t in 2:k){
-  s[t] = c(1,2)[-s[t-1]] # for 2-states, always a state swith when transitioning
+  s[t] = c(1,2)[-s[t-1]] # for 2-states, always a state switch when transitioning
   # exponentially distributed waiting times
   trans_times[t] = trans_times[t-1] + rexp(1, -Q[s[t], s[t]])
   n_arrivals = rpois(1, trans_times[t]-trans_times[t-1])
@@ -103,7 +103,7 @@ set.seed(123)
 
 k = 200 # number of state switches
 trans_times = s = rep(NA, k) # time points where the chain transitions
-s[1] = sample(1:3, 1) # uniform initial distribuion
+s[1] = sample(1:3, 1) # uniform initial distribution
 # exponentially distributed waiting times
 trans_times[1] = rexp(1, -Q[s[1],s[1]])
 n_arrivals = rpois(1, trans_times[1])
@@ -111,7 +111,7 @@ obs_times = sort(runif(n_arrivals, 0, trans_times[1]))
 x = rnorm(n_arrivals, mu[s[1]], sigma[s[1]])
 for(t in 2:k){
   # off-diagonal elements of the s[t-1] row of Q divided by the diagonal element
-  # give the probabilites of the next state
+  # give the probabilities of the next state
   s[t] = sample(c(1:3)[-s[t-1]], 1, prob = Q[s[t-1],-s[t-1]]/-Q[s[t-1],s[t-1]])
   # exponentially distributed waiting times
   trans_times[t] = trans_times[t-1] + rexp(1, -Q[s[t], s[t]])

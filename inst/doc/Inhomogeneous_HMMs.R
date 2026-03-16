@@ -26,7 +26,7 @@ beta = matrix(c(-2, -2,       # intercepts
 n = 1000 # number of observations
 set.seed(123)
 z = rnorm(n) # in practice there will be n covariate values.
-# However, we only have n-1 transitions, thererfore we only need n-1 values:
+# However, we only have n-1 transitions, therefore we only need n-1 values:
 Z = cbind(z, z^2) # quadratic effect of z
 Gamma = tpm_g(Z = Z[-1,], beta) # of dimension c(2, 2, n-1)
 delta = c(0.5, 0.5) # non-stationary initial distribution

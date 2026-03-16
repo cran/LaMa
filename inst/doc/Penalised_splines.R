@@ -22,6 +22,10 @@ library(LaMa)
 
 head(trex)
 
+## ----TapeConfig, include=FALSE------------------------------------------------
+old <- RTMB::TapeConfig()
+RTMB::TapeConfig(matmul = "plain") # speeds up forward algorithm
+
 ## ----tod2---------------------------------------------------------------------
 modmat = make_matrices(~ s(tod, bs = "cp"), # formula
                        data = data.frame(tod = 1:24), # data
@@ -270,4 +274,7 @@ segments(x0 = 1:(nrow(energy)-1), x1 = 2:nrow(energy),
          y0 = energy$Price[-nrow(energy)], y1 = energy$Price[-1], 
          col = color[energy$states[-1]], lwd = 0.5)
 
+
+## ----restore_tapeConfig, include = FALSE--------------------------------------
+RTMB::TapeConfig(old) # restoring old config
 

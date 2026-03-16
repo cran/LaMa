@@ -368,14 +368,14 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 <blockquote>
 <p>Before diving into this vignette, we recommend reading the vignette
-<a href="https://janoleko.github.io/LaMa/articles/Intro_to_LaMa.html"><strong>Introduction
+<a href="https://janolefi.github.io/LaMa/articles/Intro_to_LaMa.html"><strong>Introduction
 to LaMa</strong></a>.</p>
 </blockquote>
 <p>The regular HMM formulation needs a key assumption to be applicable,
 namely the data need to be observed at regular, equidistant time-points
-such that the transition probabilties can be interpreted meaningfully
+such that the transition probabilities can be interpreted meaningfully
 w.r.t. a specific time unit. If this is not the case, the model used
-should acocunt for this by building on a mathematical formulation in
+should account for this by building on a mathematical formulation in
 continuous time. The obvious choice here is to retain most of the HMM
 model formulation, but replace the unobserved
 <strong>discrete-time</strong> Markov chain with a
@@ -403,7 +403,7 @@ observation times <span class="math inline">\(t_1\)</span> and <span class="math
 probability matrix between these points via the identity <span class="math display">\[
 \Gamma(t_1, t_2) = \exp(Q (t_2 - t_1)),
 \]</span> where <span class="math inline">\(\exp()\)</span> is the
-matrix expoential. This follows from the so-called <strong>Kolmogorov
+matrix exponential. This follows from the so-called <strong>Kolmogorov
 forward equations</strong>, but for more details see <span class="citation">Dobrow (<a href="#ref-dobrow2016introduction">2016</a>)</span>.</p>
 <div id="example-1-two-states" class="section level2">
 <h2>Example 1: two states</h2>
@@ -437,14 +437,14 @@ see the MM(M)PP vignette.</p>
 <span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a></span>
 <span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a>k <span class="ot">=</span> <span class="dv">200</span> <span class="co"># number of state switches</span></span>
 <span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a>trans_times <span class="ot">=</span> s <span class="ot">=</span> <span class="fu">rep</span>(<span class="cn">NA</span>, k) <span class="co"># time points where the chain transitions</span></span>
-<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a>s[<span class="dv">1</span>] <span class="ot">=</span> <span class="fu">sample</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>, <span class="dv">1</span>) <span class="co"># initial distribuion c(0.5, 0.5)</span></span>
+<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a>s[<span class="dv">1</span>] <span class="ot">=</span> <span class="fu">sample</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>, <span class="dv">1</span>) <span class="co"># initial distribution c(0.5, 0.5)</span></span>
 <span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a><span class="co"># exponentially distributed waiting times</span></span>
 <span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a>trans_times[<span class="dv">1</span>] <span class="ot">=</span> <span class="fu">rexp</span>(<span class="dv">1</span>, <span class="sc">-</span>Q[s[<span class="dv">1</span>],s[<span class="dv">1</span>]])</span>
 <span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a>n_arrivals <span class="ot">=</span> <span class="fu">rpois</span>(<span class="dv">1</span>, trans_times[<span class="dv">1</span>])</span>
 <span id="cb3-9"><a href="#cb3-9" tabindex="-1"></a>obs_times <span class="ot">=</span> <span class="fu">sort</span>(<span class="fu">runif</span>(n_arrivals, <span class="dv">0</span>, trans_times[<span class="dv">1</span>]))</span>
 <span id="cb3-10"><a href="#cb3-10" tabindex="-1"></a>x <span class="ot">=</span> <span class="fu">rnorm</span>(n_arrivals, mu[s[<span class="dv">1</span>]], sigma[s[<span class="dv">1</span>]])</span>
 <span id="cb3-11"><a href="#cb3-11" tabindex="-1"></a><span class="cf">for</span>(t <span class="cf">in</span> <span class="dv">2</span><span class="sc">:</span>k){</span>
-<span id="cb3-12"><a href="#cb3-12" tabindex="-1"></a>  s[t] <span class="ot">=</span> <span class="fu">c</span>(<span class="dv">1</span>,<span class="dv">2</span>)[<span class="sc">-</span>s[t<span class="dv">-1</span>]] <span class="co"># for 2-states, always a state swith when transitioning</span></span>
+<span id="cb3-12"><a href="#cb3-12" tabindex="-1"></a>  s[t] <span class="ot">=</span> <span class="fu">c</span>(<span class="dv">1</span>,<span class="dv">2</span>)[<span class="sc">-</span>s[t<span class="dv">-1</span>]] <span class="co"># for 2-states, always a state switch when transitioning</span></span>
 <span id="cb3-13"><a href="#cb3-13" tabindex="-1"></a>  <span class="co"># exponentially distributed waiting times</span></span>
 <span id="cb3-14"><a href="#cb3-14" tabindex="-1"></a>  trans_times[t] <span class="ot">=</span> trans_times[t<span class="dv">-1</span>] <span class="sc">+</span> <span class="fu">rexp</span>(<span class="dv">1</span>, <span class="sc">-</span>Q[s[t], s[t]])</span>
 <span id="cb3-15"><a href="#cb3-15" tabindex="-1"></a>  n_arrivals <span class="ot">=</span> <span class="fu">rpois</span>(<span class="dv">1</span>, trans_times[t]<span class="sc">-</span>trans_times[t<span class="dv">-1</span>])</span>
@@ -466,7 +466,7 @@ see the MM(M)PP vignette.</p>
 </div>
 <div id="writing-the-negative-log-likelihood-function" class="section level3">
 <h3>Writing the negative log-likelihood function</h3>
-<p>The likelhood of a continuous-time HMM for observations <span class="math inline">\(x_{t_1}, \dots, x_{t_T}\)</span> at irregular time
+<p>The likelihood of a continuous-time HMM for observations <span class="math inline">\(x_{t_1}, \dots, x_{t_T}\)</span> at irregular time
 points <span class="math inline">\(t_1, \dots, t_T\)</span> has the
 exact same structure as the regular HMM likelihood: <span class="math display">\[
 L(\theta) = \delta^{(1)} \Gamma(t_1, t_2) P(x_{t_2}) \Gamma(t_2, t_3)
@@ -504,7 +504,7 @@ matrix from an unconstrained parameter vector and
 <span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a>  mod <span class="ot">&lt;-</span> <span class="fu">nlm</span>(nll, par, <span class="at">timediff =</span> timediff, <span class="at">x =</span> x, <span class="at">N =</span> <span class="dv">2</span>)</span>
 <span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a>)</span>
 <span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a><span class="co">#&gt;   0.087   0.001   0.089</span></span></code></pre></div>
+<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a><span class="co">#&gt;   0.091   0.002   0.093</span></span></code></pre></div>
 </div>
 <div id="results" class="section level3">
 <h3>Results</h3>
@@ -543,7 +543,7 @@ state to transition to, as explained in the beginning.</p>
 <span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a></span>
 <span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a>k <span class="ot">=</span> <span class="dv">200</span> <span class="co"># number of state switches</span></span>
 <span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a>trans_times <span class="ot">=</span> s <span class="ot">=</span> <span class="fu">rep</span>(<span class="cn">NA</span>, k) <span class="co"># time points where the chain transitions</span></span>
-<span id="cb9-5"><a href="#cb9-5" tabindex="-1"></a>s[<span class="dv">1</span>] <span class="ot">=</span> <span class="fu">sample</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">3</span>, <span class="dv">1</span>) <span class="co"># uniform initial distribuion</span></span>
+<span id="cb9-5"><a href="#cb9-5" tabindex="-1"></a>s[<span class="dv">1</span>] <span class="ot">=</span> <span class="fu">sample</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">3</span>, <span class="dv">1</span>) <span class="co"># uniform initial distribution</span></span>
 <span id="cb9-6"><a href="#cb9-6" tabindex="-1"></a><span class="co"># exponentially distributed waiting times</span></span>
 <span id="cb9-7"><a href="#cb9-7" tabindex="-1"></a>trans_times[<span class="dv">1</span>] <span class="ot">=</span> <span class="fu">rexp</span>(<span class="dv">1</span>, <span class="sc">-</span>Q[s[<span class="dv">1</span>],s[<span class="dv">1</span>]])</span>
 <span id="cb9-8"><a href="#cb9-8" tabindex="-1"></a>n_arrivals <span class="ot">=</span> <span class="fu">rpois</span>(<span class="dv">1</span>, trans_times[<span class="dv">1</span>])</span>
@@ -551,7 +551,7 @@ state to transition to, as explained in the beginning.</p>
 <span id="cb9-10"><a href="#cb9-10" tabindex="-1"></a>x <span class="ot">=</span> <span class="fu">rnorm</span>(n_arrivals, mu[s[<span class="dv">1</span>]], sigma[s[<span class="dv">1</span>]])</span>
 <span id="cb9-11"><a href="#cb9-11" tabindex="-1"></a><span class="cf">for</span>(t <span class="cf">in</span> <span class="dv">2</span><span class="sc">:</span>k){</span>
 <span id="cb9-12"><a href="#cb9-12" tabindex="-1"></a>  <span class="co"># off-diagonal elements of the s[t-1] row of Q divided by the diagonal element</span></span>
-<span id="cb9-13"><a href="#cb9-13" tabindex="-1"></a>  <span class="co"># give the probabilites of the next state</span></span>
+<span id="cb9-13"><a href="#cb9-13" tabindex="-1"></a>  <span class="co"># give the probabilities of the next state</span></span>
 <span id="cb9-14"><a href="#cb9-14" tabindex="-1"></a>  s[t] <span class="ot">=</span> <span class="fu">sample</span>(<span class="fu">c</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">3</span>)[<span class="sc">-</span>s[t<span class="dv">-1</span>]], <span class="dv">1</span>, <span class="at">prob =</span> Q[s[t<span class="dv">-1</span>],<span class="sc">-</span>s[t<span class="dv">-1</span>]]<span class="sc">/-</span>Q[s[t<span class="dv">-1</span>],s[t<span class="dv">-1</span>]])</span>
 <span id="cb9-15"><a href="#cb9-15" tabindex="-1"></a>  <span class="co"># exponentially distributed waiting times</span></span>
 <span id="cb9-16"><a href="#cb9-16" tabindex="-1"></a>  trans_times[t] <span class="ot">=</span> trans_times[t<span class="dv">-1</span>] <span class="sc">+</span> <span class="fu">rexp</span>(<span class="dv">1</span>, <span class="sc">-</span>Q[s[t], s[t]])</span>
@@ -573,7 +573,7 @@ state to transition to, as explained in the beginning.</p>
 <span id="cb10-8"><a href="#cb10-8" tabindex="-1"></a>  mod2 <span class="ot">&lt;-</span> <span class="fu">nlm</span>(nll, par, <span class="at">timediff =</span> timediff, <span class="at">x =</span> x, <span class="at">N =</span> <span class="dv">3</span>, <span class="at">stepmax =</span> <span class="dv">10</span>)</span>
 <span id="cb10-9"><a href="#cb10-9" tabindex="-1"></a>)</span>
 <span id="cb10-10"><a href="#cb10-10" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb10-11"><a href="#cb10-11" tabindex="-1"></a><span class="co">#&gt;   0.362   0.013   0.375</span></span>
+<span id="cb10-11"><a href="#cb10-11" tabindex="-1"></a><span class="co">#&gt;   0.379   0.007   0.387</span></span>
 <span id="cb10-12"><a href="#cb10-12" tabindex="-1"></a><span class="co"># without restricting stepmax, we run into numerical problems</span></span></code></pre></div>
 </div>
 <div id="results-1" class="section level3">
@@ -592,7 +592,7 @@ state to transition to, as explained in the beginning.</p>
 <span id="cb11-12"><a href="#cb11-12" tabindex="-1"></a><span class="co">#&gt; S2  2.821 -3.469  0.647</span></span>
 <span id="cb11-13"><a href="#cb11-13" tabindex="-1"></a><span class="co">#&gt; S3  0.000  0.770 -0.770</span></span></code></pre></div>
 <blockquote>
-<p>Continue reading with <a href="https://janoleko.github.io/LaMa/articles/MMMPPs.html"><strong>Markov-modulated
+<p>Continue reading with <a href="https://janolefi.github.io/LaMa/articles/MMMPPs.html"><strong>Markov-modulated
 Poisson processes</strong></a>.</p>
 </blockquote>
 </div>

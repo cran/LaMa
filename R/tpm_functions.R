@@ -1,6 +1,4 @@
-
 # Functions for HMMs ------------------------------------------------------
-
 
 #' Build the transition probability matrix from unconstrained parameter vector
 #'
@@ -8,14 +6,16 @@
 #' Markov chains are parametrised in terms of a transition probability matrix \eqn{\Gamma}, for which each row contains a conditional probability distribution of the next state given the current state.
 #' Hence, each row has entries between 0 and 1 that need to sum to one. 
 #' 
-#' For numerical optimisation, we parametrise in terms of unconstrained parameters, thus this function computes said matrix from an unconstrained parameter vector via the inverse multinomial logistic link (also known as softmax) applied to each row.
+#' For numerical optimisation, we parameterise in terms of unconstrained parameters, thus this function computes said matrix from an unconstrained parameter vector via the inverse multinomial logistic link (also known as softmax) applied to each row.
 #'
 #' @family transition probability matrix functions
 #'
 #' @param param unconstrained parameter vector of length N*(N-1) where N is the number of states of the Markov chain
 #' @param byrow logical indicating if the transition probability matrix should be filled by row
-#' 
+#'
 #' Defaults to \code{FALSE}, but should be set to \code{TRUE} if one wants to work with a matrix of beta parameters returned by popular HMM packages like \code{moveHMM}, \code{momentuHMM}, or \code{hmmTMB}.
+#' @param ref Optional integer vector of length N giving, for each row, the column index of the reference state 
+#' (its predictor is fixed to 0). Defaults to the diagonal (\code{ref = 1:N}).
 #'
 #' @return Transition probability matrix of dimension c(N,N)
 #' @export
@@ -29,9 +29,9 @@
 #' # 3 states: 6 free off-diagonal elements
 #' par2 = rep(-2, 6)
 #' Gamma2 = tpm(par2)
-tpm = function(param, byrow = FALSE) {
+tpm <- function(param, byrow = FALSE, ref = NULL) {
   
-  "[<-" <- RTMB::ADoverload("[<-") # overloading assignment operators, currently necessary
+  "[<-" <- ADoverload("[<-") # overloading assignment operators, currently necessary
   "c" <- ADoverload("c")
   "diag<-" <- ADoverload("diag<-")
   
@@ -44,11 +44,35 @@ tpm = function(param, byrow = FALSE) {
   }
   N <- as.integer(round(N))
   
-  Gamma <- diag(N)
-  Gamma[!Gamma] <- exp(param[1:(N*(N-1))])
+  if(is.null(ref)){
+    ref <- 1:N
+  } else{
+    if(length(ref) != N){
+      stop("The reference state vector 'ref' needs to have length equal to the number of states.")
+    }
+  }
   
-  if(byrow) Gamma <- t(Gamma)
+  expParam <- exp(param)
   
+  Gamma <- AD(matrix(1, N, N))
+  ind <- 1
+  for(i in 1:N) {
+    for(j in 1:N) {
+      if(!byrow){
+        if(i != ref[j]){       # column-wise filling
+          Gamma[j, i] <- expParam[ind]
+          ind <- ind + 1
+        }
+      } else {
+        if(j != ref[i]){       # row-wise filling
+          Gamma[i, j] <- expParam[ind]
+          ind <- ind + 1
+        }
+      }
+    }
+  }
+  
+  # Normalize rows
   Gamma <- Gamma / rowSums(Gamma)
   
   # naming
@@ -76,9 +100,14 @@ tpm = function(param, byrow = FALSE) {
 #' @param beta matrix of coefficients for the off-diagonal elements of the transition probability matrix
 #' 
 #' Needs to be of dimension c(N*(N-1), p+1), where the first column contains the intercepts.
+#' @param Eta optional pre-calculated linear predictor matrix of dimension c(n, N*(N-1)). 
+#' 
+#' Usually, \code{Eta} is calculated as \code{Z \%*\% t(beta)}. If provided, no \code{Z} and \code{beta} are necessary and will be ignored.
 #' @param byrow logical indicating if each transition probability matrix should be filled by row
 #'  
 #' Defaults to \code{FALSE}, but should be set to \code{TRUE} if one wants to work with a matrix of beta parameters returned by popular HMM packages like \code{moveHMM}, \code{momentuHMM}, or \code{hmmTMB}.
+#' @param ref Optional integer vector of length N giving, for each row, the column index of the reference state 
+#' (its predictor is fixed to 0). Defaults to the diagonal (\code{ref = 1:N}).
 #' @param ad optional logical, indicating whether automatic differentiation with \code{RTMB} should be used. By default, the function determines this itself.
 #' @param report logical, indicating whether the coefficient matrix \code{beta} should be reported from the fitted model. Defaults to \code{TRUE}, but only works if \code{ad = TRUE}.
 #' @param sparse logical, indicating whether sparsity in the rows of \code{Z} should be exploited.
@@ -92,10 +121,21 @@ tpm = function(param, byrow = FALSE) {
 #' Z = matrix(runif(200), ncol = 2)
 #' beta = matrix(c(-1, 1, 2, -2, 1, -2), nrow = 2, byrow = TRUE)
 #' Gamma = tpm_g(Z, beta)
-tpm_g = function(Z, beta, byrow = FALSE, ad = NULL, report = TRUE, sparse = FALSE){
+tpm_g = function(Z, beta, 
+                 Eta = NULL, 
+                 byrow = FALSE, 
+                 ref = NULL, 
+                 ad = NULL, 
+                 report = TRUE, 
+                 sparse = FALSE){
   
-  K <- nrow(beta)
-  p <- ncol(beta) - 1
+  if(is.null(Eta)) {
+    K <- nrow(beta)
+    p <- ncol(beta) - 1
+  } else {
+    K <- ncol(Eta)
+  }
+
   N <- 0.5 + sqrt(0.25 + K)
   int_N <- abs(N - round(N)) < .Machine$double.eps^0.5
   if (!int_N) {
@@ -103,43 +143,63 @@ tpm_g = function(Z, beta, byrow = FALSE, ad = NULL, report = TRUE, sparse = FALS
   }
   N <- as.integer(round(N))
   
-  Z = as.matrix(Z)
-  
-  if(ncol(Z) == p){
-    Z = cbind(1, Z) # adding intercept column
-  } else if(ncol(Z) != p + 1){
-    stop("The dimensions of Z and beta do not match.")
-  }
-  
-  # report quantities for easy use later
-  if(report) {
-    #if(is.null(colnames(beta))){
-      # Setting colnames for beta: Inherit colnames from Z
-    colnames(beta) <- colnames(Z)
-    #}
-    if(is.null(rownames(beta))){
-      # Setting rownames: depends on byrow
-      names <- outer(paste0("S", 1:N, ">"), paste0("S", 1:N), FUN = paste0) # matrix
-      diag(names) <- NA
-      rownames(beta) <- na.omit(if (byrow) c(t(names)) else c(names))
+  if(is.null(ref)){
+    ref <- 1:N
+  } else{
+    if(length(ref) != N){
+      stop("The reference state vector 'ref' needs to have length equal to the number of states.")
     }
-    RTMB::REPORT(beta)
   }
   
+  if(is.null(Eta)) {
+    Z = as.matrix(Z)
+    if(ncol(Z) == p){
+      Z = cbind(1, Z) # adding intercept column
+    } else if(ncol(Z) != p + 1){
+      stop("The dimensions of Z and beta do not match.")
+    }
+    
+    # report quantities for easy use later
+    if(report) {
+      #if(is.null(colnames(beta))){
+      # Setting colnames for beta: Inherit colnames from Z
+      colnames(beta) <- colnames(Z)
+      #}
+      if(is.null(rownames(beta))){
+        # Setting rownames: depends on byrow
+        names <- outer(paste0("S", 1:N, ">"), paste0("S", 1:N), FUN = paste0) # matrix
+        diag(names) <- NA
+        rownames(beta) <- na.omit(if (byrow) c(t(names)) else c(names))
+      }
+      REPORT(beta)
+    }
+  }
+
   # if ad is not explicitly provided, check if delta is an advector
   if(is.null(ad)){
-    # check if delta has any of the allowed classes
-    if(!any(class(beta) %in% c("advector", "numeric", "matrix", "array"))){
-      stop("beta needs to be either a matrix or advector.")
+    if(is.null(Eta)) {
+      # check if delta has any of the allowed classes
+      if(!any(class(beta) %in% c("advector", "numeric", "matrix", "array"))){
+        stop("beta needs to be either a matrix or advector.")
+      }
+    } else{
+      if(!inherits(Eta, c("advector", "numeric", "matrix", "array"))) {
+        stop("Eta needs to be either a matrix or advector.")
+      }
     }
     
     # if delta is advector, run ad version of the function
-    ad = inherits(beta, "advector")
+    # ad = inherits(beta, "advector")
+    ad <- ad_context()
   }
   
   if(!ad) {
     
-    Gamma = tpm_g_cpp(Z, beta, N, byrow) # C++ version
+    if(is.null(Eta)) {
+      Eta <- Z %*% t(beta) # linear predictor matrix
+    }
+    
+    Gamma <- tpm_g3_cpp(Eta, N, ref, byrow) # C++ version
     
   } else if(ad) {
     "[<-" <- ADoverload("[<-") # overloading assignment operators, currently necessary
@@ -150,26 +210,32 @@ tpm_g = function(Z, beta, byrow = FALSE, ad = NULL, report = TRUE, sparse = FALS
     #   RTMB::REPORT(beta) # reporting coefficient matrix
     # }
     
-    if(sparse) {
-      expEta <- exp(Z %sp% t(beta))
-    } else{
-      expEta <- exp(Z %*% t(beta))
+    if(is.null(Eta)) {
+      if(sparse) {
+        Eta <- Z %sp% t(beta)
+      } else{
+        Eta <- Z %*% t(beta)
+      }
     }
     
-    Gamma = array(1, dim = c(N, N, nrow(expEta)))
+    expEta <- exp(Eta)
+    
+    Gamma <- AD(array(1, dim = c(N, N, nrow(expEta))))
 
     ## Loop over entries (stuff over time happens vectorised which speeds up the tape)
     col_ind <- 1
-    for(i in seq_len(N)){ # loop over rows
-      for(j in seq_len(N)){ # loop over columns
-        if(j != i){ # only if non-diagonal
-          if(byrow){
-            Gamma[i, j, ] <- expEta[, col_ind]
-          } else{
+    for(i in seq_len(N)){       # loop over rows
+      for(j in seq_len(N)){     # loop over columns
+        if(!byrow){
+          if(i != ref[j]){       # column-wise filling
             Gamma[j, i, ] <- expEta[, col_ind]
+            col_ind <- col_ind + 1
           }
-          # increase col_ind by one
-          col_ind = col_ind + 1
+        } else {
+          if(j != ref[i]){       # row-wise filling
+            Gamma[i, j, ] <- expEta[, col_ind]
+            col_ind <- col_ind + 1
+          }
         }
       }
     }
@@ -320,11 +386,13 @@ tpm_g2 <- function(Z,
   # if ad is not explicitly provided, check if delta is an advector
   if(is.null(ad)){
     
-    if(is.list(beta)){
-      ad <- any(sapply(beta, inherits, what = "advector"))
-    } else{
-      ad <- inherits(beta, "advector")
-    }
+    # if(is.list(beta)){
+    #   ad <- any(sapply(beta, inherits, what = "advector"))
+    # } else{
+    #   ad <- inherits(beta, "advector")
+    # }
+    
+    ad <- ad_context()
   }
   
   if(!ad) {
@@ -476,7 +544,7 @@ tpm_p = function(tod = 1:24, L=24, beta, degree = 1, Z = NULL, byrow = FALSE, ad
   }
   
   # just an interface to tpm_g
-  tpm_g(Z, beta, byrow, ad, report)
+  tpm_g(Z = Z, beta = beta, byrow = byrow, ad = ad, report = report)
 }
 
 
@@ -496,6 +564,8 @@ tpm_p = function(tod = 1:24, L=24, beta, degree = 1, Z = NULL, byrow = FALSE, ad
 #'
 #' @param Q infinitesimal generator matrix of the continuous-time Markov chain of dimension c(N,N)
 #' @param timediff time differences between observations of length n-1 when based on n observations
+#' @param rates optional vector of state-dependent rates for MM(M)PP fitting. 
+#' For the MM(M)PP likelihood, the matrices needed in the forward algorithm are \eqn{\exp((Q - \Lambda) \Delta t)}, where \eqn{\Lambda} is a diagonal matrix with the state-dependent rates on the diagonal.
 #' @param ad optional logical, indicating whether automatic differentiation with \code{RTMB} should be used. By default, the function determines this itself.
 #' @param report logical, indicating whether \code{Q} should be reported from the fitted model. Defaults to \code{TRUE}, but only works if \code{ad = TRUE}.
 #'
@@ -512,11 +582,25 @@ tpm_p = function(tod = 1:24, L=24, beta, degree = 1, Z = NULL, byrow = FALSE, ad
 #'
 #' # compute all transition matrices
 #' Gamma = tpm_cont(Q, timediff)
-tpm_cont = function(Q, timediff, ad = NULL, report = TRUE){
+tpm_cont <- function(Q, timediff, rates = NULL, ad = NULL, report = TRUE){
   
   # report quantities for easy use later
   if(report) {
-    RTMB::REPORT(Q)
+    if(!ad_context()) {
+      if(all(rowSums(Q) == 0)) {
+        # only report if proper generator matrix. Q is probably Q - diag(rates)
+        RTMB::REPORT(Q)
+      }
+    }
+  }
+  
+  if(!is.null(rates)) {
+    if(length(rates) != nrow(Q)) {
+      stop("Length of rates needs to be equal to the number of states.")
+    }
+    
+    "diag<-" <- ADoverload("diag<-")
+    Q <- Q - diag(rates)
   }
   
   # if ad is not explicitly provided, check if delta is an advector
@@ -527,7 +611,8 @@ tpm_cont = function(Q, timediff, ad = NULL, report = TRUE){
     }
     
     # if Q is advector, run ad version of the function
-    ad = inherits(Q, "advector")
+    # ad = inherits(Q, "advector")
+    ad <- ad_context()
   }
   
   if(!ad) {
@@ -553,6 +638,7 @@ tpm_cont = function(Q, timediff, ad = NULL, report = TRUE){
   rownames(Qube) <- statenames
   colnames(Qube) <- statenames
   
+  attr(Qube, "time") <- "continuous"
   Qube
 }
 
@@ -934,7 +1020,7 @@ tpm_ihsmm = function(omega, dm,
 #' N = 2 # number of states
 #' L = 24 # cycle length
 #' # time-varying mean dwell times
-#' Z = trigBasisExp(1:L) # trigonometric basis functions design matrix
+#' Z = cosinor(1:L, period = L) # trigonometric basis functions design matrix
 #' beta = matrix(c(2, 2, 0.1, -0.1, -0.2, 0.2), nrow = 2)
 #' Lambda = exp(cbind(1, Z) %*% t(beta))
 #' sizes = c(20, 20) # approximating chain with 40 states

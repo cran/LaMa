@@ -9,12 +9,12 @@ status](https://www.r-pkg.org/badges/version/LaMa)](https://CRAN.R-project.org/p
 downloads](https://cranlogs.r-pkg.org/badges/last-month/LaMa)](https://cran.r-project.org/package=LaMa)
 [![total
 downloads](https://cranlogs.r-pkg.org:443/badges/grand-total/LaMa)](https://cranlogs.r-pkg.org:443/badges/grand-total/LaMa)
-[![R-CMD-check](https://github.com/janoleko/LaMa/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/janoleko/LaMa/actions/workflows/R-CMD-check.yaml)
+[![R-CMD-check](https://github.com/janolefi/LaMa/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/janolefi/LaMa/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
 A variety of **latent Markov models**
-<a href="https://arxiv.org/abs/2406.19157" target="_blank">(Mews,
-Koslik, and Langrock 2024)</a>, including **hidden Markov models**
+<a href="https://journals.sagepub.com/doi/abs/10.1177/1471082X251355681" target="_blank">(Mews,
+Koslik, and Langrock 2025)</a>, including **hidden Markov models**
 (HMMs), **hidden semi-Markov models** (HSMMs), **state-space models**
 (SSMs) and **continuous-time** variants can be formulated and estimated
 within the same framework via directly maximising the likelihood
@@ -61,7 +61,7 @@ install.packages("LaMa")
 or the development version from Github:
 
 ``` r
-remotes::install_github("janoleko/LaMa")
+remotes::install_github("janolefi/LaMa")
 ```
 
 <!-- (To install from Github, you need a functional <a href="https://teuder.github.io/rcpp4everyone_en/020_install.html" target="_blank">C++ compiler</a>.) -->
@@ -76,28 +76,28 @@ package.
 HMMs, from simple to complex:
 
 - [Introduction to
-  LaMa](https://janoleko.github.io/LaMa/articles/Intro_to_LaMa.html)
+  LaMa](https://janolefi.github.io/LaMa/articles/Intro_to_LaMa.html)
 - [Inhomogeneous HMMs with covariate
-  effects](https://janoleko.github.io/LaMa/articles/Inhomogeneous_HMMs.html)
+  effects](https://janolefi.github.io/LaMa/articles/Inhomogeneous_HMMs.html)
 - [Longitudinal
-  data](https://janoleko.github.io/LaMa/articles/Longitudinal_data.html)
+  data](https://janolefi.github.io/LaMa/articles/Longitudinal_data.html)
 - [Periodic
-  HMMs](https://janoleko.github.io/LaMa/articles/Periodic_HMM.html)
+  HMMs](https://janolefi.github.io/LaMa/articles/Periodic_HMM.html)
 - [LaMa and
-  RTMB](https://janoleko.github.io/LaMa/articles/LaMa_and_RTMB.html)
+  RTMB](https://janolefi.github.io/LaMa/articles/LaMa_and_RTMB.html)
 - [Penalised
-  splines](https://janoleko.github.io/LaMa/articles/Penalised_splines.html)
+  splines](https://janolefi.github.io/LaMa/articles/Penalised_splines.html)
 
 Other latent Markov model classes:
 
 - [State-space
-  models](https://janoleko.github.io/LaMa/articles/State_space_models.html)
+  models](https://janolefi.github.io/LaMa/articles/State_space_models.html)
 - [Continuous-time
-  HMMs](https://janoleko.github.io/LaMa/articles/Continuous_time_HMMs.html)
+  HMMs](https://janolefi.github.io/LaMa/articles/Continuous_time_HMMs.html)
 - [Hidden semi-Markov
-  models](https://janoleko.github.io/LaMa/articles/HSMMs.html)
+  models](https://janolefi.github.io/LaMa/articles/HSMMs.html)
 - [Markov-modulated (marked) Poisson
-  processes](https://janoleko.github.io/LaMa/articles/MMMPPs.html)
+  processes](https://janolefi.github.io/LaMa/articles/MMMPPs.html)
 
 <!-- ## Citation -->
 
@@ -161,7 +161,7 @@ system.time(
   mod <- nlm(nll, par, step = trex$step)
 )
 #>    user  system elapsed 
-#>   0.368   0.010   0.380
+#>   0.359   0.014   0.399
 ```
 
 Really fast for 10.000 data points!
@@ -180,11 +180,11 @@ results:
 #>       S1       S2 
 #> 0.481733 0.518267
 (mu = exp(mod$estimate[3:4]))
-#> [1] 0.3034926 2.5057053
+#> [1] 0.3034926 2.5057054
 (sigma = exp(mod$estimate[5:6]))
 #> [1] 0.2015258 1.4908153
 
-hist(trex$step, prob = TRUE, bor = "white", breaks = 40, main = "", xlab = "step length")
+hist(trex$step, prob = TRUE, bor = "white", breaks = 40, main = "", xlab = "Step length")
 curve(delta[1] * dgamma2(x, mu[1], sigma[1]), add = TRUE, lwd = 2, col = "orange", n=500)
 curve(delta[2] * dgamma2(x, mu[2], sigma[2]), add = TRUE, lwd = 2, col = "deepskyblue", n=500)
 legend("topright", col = c("orange", "deepskyblue"), lwd = 2, bty = "n", legend = c("state 1", "state 2"))
@@ -197,9 +197,9 @@ entry-spacing="0">
 
 <div id="ref-mews2024build" class="csl-entry">
 
-Mews, Sina, Jan-Ole Koslik, and Roland Langrock. 2024. “How to Build
-Your Latent Markov Model - the Role of Time and Space.” *arXiv Preprint
-arXiv:2406.19157*.
+Mews, Sina, Jan-Ole Koslik, and Roland Langrock. 2025. “How to Build
+Your Latent Markov Model: The Role of Time and Space.” *Statistical
+Modelling* 0 (0). <https://doi.org/10.1177/1471082X251355681>.
 
 </div>
 

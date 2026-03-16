@@ -7,7 +7,7 @@ knitr::opts_chunk$set(
   error = TRUE
 )
 
-## ----setup--------------------------------------------------------------------
+## ----setup, message = FALSE---------------------------------------------------
 library(LaMa)
 
 ## ----data---------------------------------------------------------------------
@@ -49,7 +49,11 @@ nll = function(par) {
   -forward(delta, Gamma, allprobs) # simple forward algorithm
 }
 
-## ----ADfunction---------------------------------------------------------------
+## ----TapeConfig, include=FALSE------------------------------------------------
+old <- RTMB::TapeConfig()
+RTMB::TapeConfig(matmul = "plain") # speeds up forward algorithm
+
+## ----ADfunction, message = FALSE----------------------------------------------
 obj = MakeADFun(nll, par, silent = TRUE) # creating the objective function
 
 ## ----tmbobject----------------------------------------------------------------
@@ -114,16 +118,16 @@ sdr = sdreport(obj)
 summary(sdr)
 
 ## ----sdreport3, eval = F------------------------------------------------------
-#  # estimated parameter in list format
-#  as.list(sdr, "Estimate")
-#  # parameter standard errors in list format
-#  as.list(sdr, "Std")
+# # estimated parameter in list format
+# as.list(sdr, "Estimate")
+# # parameter standard errors in list format
+# as.list(sdr, "Std")
 
 ## ----sdreport4, eval = F------------------------------------------------------
-#  # adreported parameters as list
-#  as.list(sdr, "Estimate", report = TRUE)
-#  # their standard errors
-#  as.list(sdr, "Std", report = TRUE)
+# # adreported parameters as list
+# as.list(sdr, "Estimate", report = TRUE)
+# # their standard errors
+# as.list(sdr, "Std", report = TRUE)
 
 ## ----pres, fig.width = 8, fig.height = 4--------------------------------------
 pres_step = pseudo_res(trex$step, "gamma2", list(mean = mu, sd = sigma), mod = mod)
@@ -167,7 +171,8 @@ nll2 = function(par) {
   allprobs = matrix(1, nrow = length(step), ncol = N)
   ind = which(!is.na(step) & !is.na(angle)) # only for non-NA obs.
   for(j in 1:N){
-    allprobs[ind,j] = dgamma2(step[ind],mu[j],sigma[j])*dvm(angle[ind],0,kappa[j])
+    allprobs[ind,j] = dgamma2(step[ind],mu[j],sigma[j]) *
+      dvm(angle[ind],0,kappa[j])
   }
   -forward_g(delta, Gamma[,,tod], allprobs) # indexing 24 unique tpms by tod in data
 }
@@ -177,7 +182,7 @@ obj2 = MakeADFun(nll2, par, silent = TRUE) # creating the objective function
 opt2 = nlminb(obj2$par, obj2$fn, obj2$gr) # optimisation
 
 ## ----MLE2, fig.width = 8, fig.height = 5--------------------------------------
-mod2 = obj2$report()
+mod2 = report(obj2)
 
 sdr = sdreport(obj2)
 Gamma = as.list(sdr, "Estimate", report = TRUE)$Gamma
@@ -187,7 +192,7 @@ Delta = as.list(sdr, "Estimate", report = TRUE)$Delta
 Deltasd = as.list(sdr, "Std", report = TRUE)$Delta
 
 tod_seq = seq(0, 24, length = 200) # sequence for plotting
-Z_pred = trigBasisExp(tod_seq, degree = 2) # design matrix for prediction
+Z_pred = predict(modmat, newdata = data.frame(tod = tod_seq))
 
 Gamma_plot = tpm_g(Z_pred, mod2$beta) # interpolating transition probs
 
@@ -206,8 +211,14 @@ segments(x0 = 1:24, y0 = Delta[,2]-1.96*Deltasd[,2], lwd = 2,
          y1 = Delta[,2]+1.96*Deltasd[,2], col = "deepskyblue")
 axis(1, at = seq(0,24,by=4), labels = seq(0,24,by=4))
 
+## ----restore_tapeConfig, include = FALSE--------------------------------------
+RTMB::TapeConfig(old) # restoring old config
+
+## ----TapeConfigPrint, eval = FALSE--------------------------------------------
+# RTMB::TapeConfig(matmul = "plain")
+
 ## ----error, eval = FALSE------------------------------------------------------
-#  stop("Invalid argument to 'advector' (lost class attribute?)")
+# stop("Invalid argument to 'advector' (lost class attribute?)")
 
 ## ----overloading--------------------------------------------------------------
 "[<-" <- ADoverload("[<-")
@@ -217,19 +228,22 @@ axis(1, at = seq(0,24,by=4), labels = seq(0,24,by=4))
 "diag<-" <- ADoverload("diag<-")
 
 ## ----NA, eval = FALSE---------------------------------------------------------
-#  X = array(dim = c(1,2,3))
-#  # which is the same as
-#  X = array(NA, dim = c(1,2,3))
+# X = array(dim = c(1,2,3))
+# # which is the same as
+# X = array(NA, dim = c(1,2,3))
 
 ## ----NaN, eval = FALSE--------------------------------------------------------
-#  X = array(NaN, dim = c(1,2,3))
-#  # or
-#  X = array(0, dim = c(1,2,3))
+# X = array(NaN, dim = c(1,2,3))
+# # or
+# X = array(0, dim = c(1,2,3))
+
+## ----arrayfill, eval = FALSE--------------------------------------------------
+# X <- AD(array(...))
 
 ## ----max2, eval = FALSE-------------------------------------------------------
-#  max2 = function(x,y){
-#    (x + y + abs(x - y)) / 2
-#  }
+# max2 = function(x,y){
+#   (x + y + abs(x - y)) / 2
+# }
 
 ## ----bytecompiler, message = FALSE--------------------------------------------
 compiler::enableJIT(0)

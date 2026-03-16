@@ -12,7 +12,7 @@ options(rmarkdown.html_vignette.check_title = FALSE)
 library(LaMa)
 
 ## ----tpm----------------------------------------------------------------------
-(Gamma = tpm(c(-2, -3))) # 2 states -> 2*(1-2) = 2 off-diagonal entries
+(Gamma = tpm(c(-2, -3))) # 2 states -> 2*(2-1) = 2 off-diagonal entries
 
 ## ----stationary---------------------------------------------------------------
 (delta = stationary(Gamma))

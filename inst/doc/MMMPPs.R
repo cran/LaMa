@@ -23,7 +23,7 @@ set.seed(123)
 
 k = 200 # number of state switches
 trans_times = s = rep(NA, k) # time points where the chain transitions
-s[1] = sample(1:2, 1) # initial distribuion c(0.5, 0.5)
+s[1] = sample(1:2, 1) # initial distribution c(0.5, 0.5)
 # exponentially distributed waiting times
 trans_times[1] = rexp(1, -Q[s[1],s[1]])
 # in a fixed interval, the number of arrivals is Pois(lambda * interval_length)
@@ -31,7 +31,7 @@ n_arrivals = rpois(1, lambda[s[1]]*trans_times[1])
 # arrival times within fixed interval are uniformly distributed
 arrival_times = runif(n_arrivals, 0, trans_times[1])
 for(t in 2:k){
-  s[t] = c(1,2)[-s[t-1]] # for 2-states, always a state swith when transitioning
+  s[t] = c(1,2)[-s[t-1]] # for 2-states, always a state switch when transitioning
   # exponentially distributed waiting times
   trans_times[t] = trans_times[t-1] + rexp(1, -Q[s[t], s[t]])
   # in a fixed interval, the number of arrivals is Pois(lambda * interval_length)
@@ -86,7 +86,7 @@ lambda = c(1, 5, 20)
 Q = matrix(c(-0.5, 0.3, 0.2,
              0.7, -1, 0.3,
              1, 1, -2), nrow = 3, byrow = TRUE)
-# parmeters for distributions of state-dependent marks
+# parameters for distributions of state-dependent marks
 # (here normally distributed)
 mu = c(-5, 0, 5)
 sigma = c(2, 1, 2)
@@ -101,7 +101,7 @@ curve(dnorm(x, 5, 2), add = TRUE, lwd = 2, col = color[3], n = 200)
 set.seed(123)
 k = 200 # number of state switches
 trans_times = s = rep(NA, k) # time points where the chain transitions
-s[1] = sample(1:3, 1) # initial distribuion uniformly
+s[1] = sample(1:3, 1) # initial distribution uniformly
 # exponentially distributed waiting times
 trans_times[1] = rexp(1, -Q[s[1],s[1]])
 # in a fixed interval, the number of arrivals is Pois(lambda * interval_length)
@@ -113,7 +113,7 @@ marks = rnorm(n_arrivals, mu[s[1]], sigma[s[1]])
 
 for(t in 2:k){
   # off-diagonal elements of the s[t-1] row of Q divided by the diagonal element
-  # give the probabilites of the next state
+  # give the probabilities of the next state
   s[t] = sample(c(1:3)[-s[t-1]], 1, prob = Q[s[t-1],-s[t-1]]/-Q[s[t-1],s[t-1]])
   # exponentially distributed waiting times
   trans_times[t] = trans_times[t-1] + rexp(1, -Q[s[t],s[t]])

@@ -74,7 +74,7 @@ nll = function(par, x, N, agsizes){
 }
 
 ## ----model--------------------------------------------------------------------
-# intial values
+# initial values
 par = c(10, 40, 100, log(c(5, 20, 50)), # state-dependent
                log(c(7,4,4)), # dwell time means
                rep(0, 3)) # omega

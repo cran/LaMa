@@ -369,8 +369,8 @@ processes</h1>
 
 <blockquote>
 <p>Before diving into this vignette, we recommend reading the vignettes
-<a href="https://janoleko.github.io/LaMa/articles/Intro_to_LaMa.html"><strong>Introduction
-to LaMa</strong></a> and <a href="https://janoleko.github.io/LaMa/articles/Continuous_time_HMMs.html"><strong>Continuous-time
+<a href="https://janolefi.github.io/LaMa/articles/Intro_to_LaMa.html"><strong>Introduction
+to LaMa</strong></a> and <a href="https://janolefi.github.io/LaMa/articles/Continuous_time_HMMs.html"><strong>Continuous-time
 HMMs</strong></a>.</p>
 </blockquote>
 <p><code>LaMa</code> can also be used to fit so-called
@@ -382,11 +382,11 @@ center, or patients in the hospital. The main difference compared to
 continuous-time HMMs is the arrival or observation
 <strong>times</strong> themselves <strong>carry information</strong> on
 the <strong>latent state process</strong>. To capture this information,
-we need to model them explicitely as random-variables.</p>
+we need to model them explicitly as random-variables.</p>
 <p>A homogeneous Poisson process is mainly characterised by the fact
 that the <strong>number of arrivals</strong> within a fixed time
 interval is <strong>Poisson distributed</strong> with a mean that is
-proporional to the length of the interval. The <strong>waiting
+proportional to the length of the interval. The <strong>waiting
 times</strong> between arrivals are <strong>exponentially
 distributed</strong>. While the latter is not true for non-homogeneous
 Poisson processes in general, we can interpret a Markov modulated
@@ -415,7 +415,7 @@ underlying Markov chain in state 2, i.e. state 2 is
 <span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a></span>
 <span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a>k <span class="ot">=</span> <span class="dv">200</span> <span class="co"># number of state switches</span></span>
 <span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a>trans_times <span class="ot">=</span> s <span class="ot">=</span> <span class="fu">rep</span>(<span class="cn">NA</span>, k) <span class="co"># time points where the chain transitions</span></span>
-<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a>s[<span class="dv">1</span>] <span class="ot">=</span> <span class="fu">sample</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>, <span class="dv">1</span>) <span class="co"># initial distribuion c(0.5, 0.5)</span></span>
+<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a>s[<span class="dv">1</span>] <span class="ot">=</span> <span class="fu">sample</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>, <span class="dv">1</span>) <span class="co"># initial distribution c(0.5, 0.5)</span></span>
 <span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a><span class="co"># exponentially distributed waiting times</span></span>
 <span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a>trans_times[<span class="dv">1</span>] <span class="ot">=</span> <span class="fu">rexp</span>(<span class="dv">1</span>, <span class="sc">-</span>Q[s[<span class="dv">1</span>],s[<span class="dv">1</span>]])</span>
 <span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a><span class="co"># in a fixed interval, the number of arrivals is Pois(lambda * interval_length)</span></span>
@@ -423,7 +423,7 @@ underlying Markov chain in state 2, i.e. state 2 is
 <span id="cb3-10"><a href="#cb3-10" tabindex="-1"></a><span class="co"># arrival times within fixed interval are uniformly distributed</span></span>
 <span id="cb3-11"><a href="#cb3-11" tabindex="-1"></a>arrival_times <span class="ot">=</span> <span class="fu">runif</span>(n_arrivals, <span class="dv">0</span>, trans_times[<span class="dv">1</span>])</span>
 <span id="cb3-12"><a href="#cb3-12" tabindex="-1"></a><span class="cf">for</span>(t <span class="cf">in</span> <span class="dv">2</span><span class="sc">:</span>k){</span>
-<span id="cb3-13"><a href="#cb3-13" tabindex="-1"></a>  s[t] <span class="ot">=</span> <span class="fu">c</span>(<span class="dv">1</span>,<span class="dv">2</span>)[<span class="sc">-</span>s[t<span class="dv">-1</span>]] <span class="co"># for 2-states, always a state swith when transitioning</span></span>
+<span id="cb3-13"><a href="#cb3-13" tabindex="-1"></a>  s[t] <span class="ot">=</span> <span class="fu">c</span>(<span class="dv">1</span>,<span class="dv">2</span>)[<span class="sc">-</span>s[t<span class="dv">-1</span>]] <span class="co"># for 2-states, always a state switch when transitioning</span></span>
 <span id="cb3-14"><a href="#cb3-14" tabindex="-1"></a>  <span class="co"># exponentially distributed waiting times</span></span>
 <span id="cb3-15"><a href="#cb3-15" tabindex="-1"></a>  trans_times[t] <span class="ot">=</span> trans_times[t<span class="dv">-1</span>] <span class="sc">+</span> <span class="fu">rexp</span>(<span class="dv">1</span>, <span class="sc">-</span>Q[s[t], s[t]])</span>
 <span id="cb3-16"><a href="#cb3-16" tabindex="-1"></a>  <span class="co"># in a fixed interval, the number of arrivals is Pois(lambda * interval_length)</span></span>
@@ -484,7 +484,7 @@ state-dependent density matrices to be <span class="math inline">\(\Lambda\)</sp
 <span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a>  mod <span class="ot">&lt;-</span> <span class="fu">nlm</span>(nll, par, <span class="at">timediff =</span> timediff, <span class="at">N =</span> <span class="dv">2</span>, <span class="at">stepmax =</span> <span class="dv">10</span>)</span>
 <span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a>)</span>
 <span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a><span class="co">#&gt;   0.085   0.001   0.087</span></span>
+<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a><span class="co">#&gt;   0.079   0.001   0.079</span></span>
 <span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a><span class="co"># we often need the stepmax, as the matrix exponential can be numerically unstable</span></span></code></pre></div>
 </div>
 <div id="results" class="section level3">
@@ -517,7 +517,7 @@ times</strong> (because sick patients visit more often) and the
 <span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a>Q <span class="ot">=</span> <span class="fu">matrix</span>(<span class="fu">c</span>(<span class="sc">-</span><span class="fl">0.5</span>, <span class="fl">0.3</span>, <span class="fl">0.2</span>,</span>
 <span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a>             <span class="fl">0.7</span>, <span class="sc">-</span><span class="dv">1</span>, <span class="fl">0.3</span>,</span>
 <span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a>             <span class="dv">1</span>, <span class="dv">1</span>, <span class="sc">-</span><span class="dv">2</span>), <span class="at">nrow =</span> <span class="dv">3</span>, <span class="at">byrow =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a><span class="co"># parmeters for distributions of state-dependent marks</span></span>
+<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a><span class="co"># parameters for distributions of state-dependent marks</span></span>
 <span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a><span class="co"># (here normally distributed)</span></span>
 <span id="cb8-9"><a href="#cb8-9" tabindex="-1"></a>mu <span class="ot">=</span> <span class="fu">c</span>(<span class="sc">-</span><span class="dv">5</span>, <span class="dv">0</span>, <span class="dv">5</span>)</span>
 <span id="cb8-10"><a href="#cb8-10" tabindex="-1"></a>sigma <span class="ot">=</span> <span class="fu">c</span>(<span class="dv">2</span>, <span class="dv">1</span>, <span class="dv">2</span>)</span>
@@ -535,7 +535,7 @@ generalise to more than two hidden states.</p>
 <div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">123</span>)</span>
 <span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a>k <span class="ot">=</span> <span class="dv">200</span> <span class="co"># number of state switches</span></span>
 <span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a>trans_times <span class="ot">=</span> s <span class="ot">=</span> <span class="fu">rep</span>(<span class="cn">NA</span>, k) <span class="co"># time points where the chain transitions</span></span>
-<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a>s[<span class="dv">1</span>] <span class="ot">=</span> <span class="fu">sample</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">3</span>, <span class="dv">1</span>) <span class="co"># initial distribuion uniformly</span></span>
+<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a>s[<span class="dv">1</span>] <span class="ot">=</span> <span class="fu">sample</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">3</span>, <span class="dv">1</span>) <span class="co"># initial distribution uniformly</span></span>
 <span id="cb9-5"><a href="#cb9-5" tabindex="-1"></a><span class="co"># exponentially distributed waiting times</span></span>
 <span id="cb9-6"><a href="#cb9-6" tabindex="-1"></a>trans_times[<span class="dv">1</span>] <span class="ot">=</span> <span class="fu">rexp</span>(<span class="dv">1</span>, <span class="sc">-</span>Q[s[<span class="dv">1</span>],s[<span class="dv">1</span>]])</span>
 <span id="cb9-7"><a href="#cb9-7" tabindex="-1"></a><span class="co"># in a fixed interval, the number of arrivals is Pois(lambda * interval_length)</span></span>
@@ -547,7 +547,7 @@ generalise to more than two hidden states.</p>
 <span id="cb9-13"><a href="#cb9-13" tabindex="-1"></a></span>
 <span id="cb9-14"><a href="#cb9-14" tabindex="-1"></a><span class="cf">for</span>(t <span class="cf">in</span> <span class="dv">2</span><span class="sc">:</span>k){</span>
 <span id="cb9-15"><a href="#cb9-15" tabindex="-1"></a>  <span class="co"># off-diagonal elements of the s[t-1] row of Q divided by the diagonal element</span></span>
-<span id="cb9-16"><a href="#cb9-16" tabindex="-1"></a>  <span class="co"># give the probabilites of the next state</span></span>
+<span id="cb9-16"><a href="#cb9-16" tabindex="-1"></a>  <span class="co"># give the probabilities of the next state</span></span>
 <span id="cb9-17"><a href="#cb9-17" tabindex="-1"></a>  s[t] <span class="ot">=</span> <span class="fu">sample</span>(<span class="fu">c</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">3</span>)[<span class="sc">-</span>s[t<span class="dv">-1</span>]], <span class="dv">1</span>, <span class="at">prob =</span> Q[s[t<span class="dv">-1</span>],<span class="sc">-</span>s[t<span class="dv">-1</span>]]<span class="sc">/-</span>Q[s[t<span class="dv">-1</span>],s[t<span class="dv">-1</span>]])</span>
 <span id="cb9-18"><a href="#cb9-18" tabindex="-1"></a>  <span class="co"># exponentially distributed waiting times</span></span>
 <span id="cb9-19"><a href="#cb9-19" tabindex="-1"></a>  trans_times[t] <span class="ot">=</span> trans_times[t<span class="dv">-1</span>] <span class="sc">+</span> <span class="fu">rexp</span>(<span class="dv">1</span>, <span class="sc">-</span>Q[s[t],s[t]])</span>
@@ -581,7 +581,7 @@ et al. (<a href="#ref-mews2023markov">2023</a>)</span>): <span class="math displ
 L(\theta) = \pi P(y_0) \Bigl(\prod_{i=1}^n \exp\bigl((Q-\Lambda)
 x_i\bigr)\Lambda P(y_i) \Bigr)1,
 \]</span> where <span class="math inline">\(Q\)</span>, <span class="math inline">\(\Lambda\)</span> and <span class="math inline">\(\pi\)</span> are as above and <span class="math inline">\(P(y_i)\)</span> is a diagonal matrix with
-state-dependent densites for the observation at time <span class="math inline">\(t_i\)</span>. We can again easily calculate the
+state-dependent densities for the observation at time <span class="math inline">\(t_i\)</span>. We can again easily calculate the
 log of the above expression using the standard implementation of the
 general forward algorithm <code>forward_g()</code> when first
 calculating the <code>allprobs</code> matrix with state-dependent
@@ -613,7 +613,7 @@ rates.</p>
 <span id="cb12-8"><a href="#cb12-8" tabindex="-1"></a>  mod2 <span class="ot">&lt;-</span> <span class="fu">nlm</span>(nllMark, par, <span class="at">y =</span> marks, <span class="at">timediff =</span> timediff, <span class="at">N =</span> <span class="dv">3</span>, <span class="at">stepmax =</span> <span class="dv">5</span>)</span>
 <span id="cb12-9"><a href="#cb12-9" tabindex="-1"></a>)</span>
 <span id="cb12-10"><a href="#cb12-10" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb12-11"><a href="#cb12-11" tabindex="-1"></a><span class="co">#&gt;   0.630   0.015   0.673</span></span></code></pre></div>
+<span id="cb12-11"><a href="#cb12-11" tabindex="-1"></a><span class="co">#&gt;   0.629   0.007   0.635</span></span></code></pre></div>
 </div>
 <div id="results-1" class="section level3">
 <h3>Results</h3>
@@ -621,17 +621,17 @@ rates.</p>
 <span id="cb13-2"><a href="#cb13-2" tabindex="-1"></a>(<span class="at">lambda =</span> <span class="fu">exp</span>(mod2<span class="sc">$</span>estimate[<span class="dv">1</span><span class="sc">:</span>N]))</span>
 <span id="cb13-3"><a href="#cb13-3" tabindex="-1"></a><span class="co">#&gt; [1]  0.9646715  4.8640549 19.5008964</span></span>
 <span id="cb13-4"><a href="#cb13-4" tabindex="-1"></a>(<span class="at">mu =</span> mod2<span class="sc">$</span>estimate[N<span class="sc">+</span><span class="dv">1</span><span class="sc">:</span>N])</span>
-<span id="cb13-5"><a href="#cb13-5" tabindex="-1"></a><span class="co">#&gt; [1] -5.18540504 -0.09097056  4.80538783</span></span>
+<span id="cb13-5"><a href="#cb13-5" tabindex="-1"></a><span class="co">#&gt; [1] -5.18540502 -0.09097056  4.80538784</span></span>
 <span id="cb13-6"><a href="#cb13-6" tabindex="-1"></a>(<span class="at">sigma =</span> <span class="fu">exp</span>(mod2<span class="sc">$</span>estimate[<span class="dv">2</span><span class="sc">*</span>N<span class="sc">+</span><span class="dv">1</span><span class="sc">:</span>N]))</span>
-<span id="cb13-7"><a href="#cb13-7" tabindex="-1"></a><span class="co">#&gt; [1] 1.7931063 0.9644485 2.0093266</span></span>
+<span id="cb13-7"><a href="#cb13-7" tabindex="-1"></a><span class="co">#&gt; [1] 1.7931063 0.9644486 2.0093266</span></span>
 <span id="cb13-8"><a href="#cb13-8" tabindex="-1"></a>(<span class="at">Q =</span> <span class="fu">generator</span>(mod2<span class="sc">$</span>estimate[<span class="dv">3</span><span class="sc">*</span>N<span class="sc">+</span><span class="dv">1</span><span class="sc">:</span>(N<span class="sc">*</span>(N<span class="dv">-1</span>))]))</span>
 <span id="cb13-9"><a href="#cb13-9" tabindex="-1"></a><span class="co">#&gt;            S1         S2         S3</span></span>
-<span id="cb13-10"><a href="#cb13-10" tabindex="-1"></a><span class="co">#&gt; S1 -0.5909289  0.2788642  0.3120648</span></span>
-<span id="cb13-11"><a href="#cb13-11" tabindex="-1"></a><span class="co">#&gt; S2  0.9258937 -1.1798376  0.2539438</span></span>
-<span id="cb13-12"><a href="#cb13-12" tabindex="-1"></a><span class="co">#&gt; S3  1.1933694  1.2097185 -2.4030879</span></span>
+<span id="cb13-10"><a href="#cb13-10" tabindex="-1"></a><span class="co">#&gt; S1 -0.5909290  0.2788642  0.3120648</span></span>
+<span id="cb13-11"><a href="#cb13-11" tabindex="-1"></a><span class="co">#&gt; S2  0.9258938 -1.1798375  0.2539438</span></span>
+<span id="cb13-12"><a href="#cb13-12" tabindex="-1"></a><span class="co">#&gt; S3  1.1933693  1.2097185 -2.4030878</span></span>
 <span id="cb13-13"><a href="#cb13-13" tabindex="-1"></a>(<span class="at">Pi =</span> <span class="fu">stationary_cont</span>(Q))</span>
 <span id="cb13-14"><a href="#cb13-14" tabindex="-1"></a><span class="co">#&gt;        S1        S2        S3 </span></span>
-<span id="cb13-15"><a href="#cb13-15" tabindex="-1"></a><span class="co">#&gt; 0.6296991 0.2609524 0.1093485</span></span></code></pre></div>
+<span id="cb13-15"><a href="#cb13-15" tabindex="-1"></a><span class="co">#&gt; 0.6296990 0.2609524 0.1093485</span></span></code></pre></div>
 </div>
 </div>
 <div id="references" class="section level2 unnumbered">

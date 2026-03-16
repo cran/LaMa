@@ -85,7 +85,7 @@ states = viterbi(delta, Gamma, allprobs) # global/ hard decoding
 
 oldpar = par(mar = c(5,4,3,4.5)+0.1)
 plot(y, type = "l", bty = "n", ylim = c(-50,20), yaxt = "n")
-# when there are so many states it is not too sensable to only plot the most probable state,
+# when there are so many states it is not too sensible to only plot the most probable state,
 # as its probability might still be very small. Generally, we are approximating continuous 
 # distributions, thus it makes sense to plot the entire conditional distribution.
 maxprobs = apply(probs, 1, max)

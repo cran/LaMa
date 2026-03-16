@@ -56,6 +56,7 @@ lambda = c(1,1,2) # length = total number of random effects
 penalty(re, S, lambda)
 
 # Full model-fitting example
+\donttest{
 data = trex[1:1000,] # subset
 
 # initial parameter list
@@ -89,11 +90,12 @@ pnll = function(par) {
   ind = which(!is.na(step)) # only for non-NA obs.
   for(j in 1:N) allprobs[ind,j] = dgamma2(step[ind],mu[j],sigma[j])
   -forward_g(delta, Gamma[,,tod], allprobs) +
-      penalty(betaspline, S, lambda) # this does all the penalization work
+      penalty(betaspline, S, lambda) # this does all the penalisation work
 }
 
 # model fitting
 mod = qreml(pnll, par, dat, random = "betaspline")
+}
 }
 \seealso{
 \code{\link{qreml}} for the \strong{qREML} algorithm

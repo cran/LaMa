@@ -47,6 +47,7 @@
 #' penalty(re, S, lambda)
 #' 
 #' # Full model-fitting example
+#' \donttest{
 #' data = trex[1:1000,] # subset
 #'
 #' # initial parameter list
@@ -85,6 +86,7 @@
 #'
 #' # model fitting
 #' mod = qreml(pnll, par, dat, random = "betaspline")
+#' }
 penalty = function(re_coef, S, lambda) {
   # Capture the argument name used in the call to `penalty`
   # current_name <- as.character(substitute(lambda))
@@ -150,6 +152,12 @@ penalty = function(re_coef, S, lambda) {
   
   # Get the number of similar random effects for each distinct random effect
   re_lengths = sapply(re_coef, nrow)  # All elements are matrices now
+  
+  # check if lambda has the correct length
+  n_lambdas <- sum(re_lengths)
+  if(length(lambda) != n_lambdas){
+    stop(paste0("The length of lambda (", length(lambda), ") does not match the total number of random effects (", n_lambdas, ")."))
+  }
   
   # Precompute start and end indices for lambda
   end = cumsum(re_lengths)
@@ -255,44 +263,7 @@ penalty = function(re_coef, S, lambda) {
 #' @import RTMB
 #'
 #' @examples
-#' data = trex[1:1000,] # subset
-#'
-#' # initial parameter list
-#' par = list(logmu = log(c(0.3, 1)), # step mean
-#'            logsigma = log(c(0.2, 0.7)), # step sd
-#'            beta0 = c(-2,-2), # state process intercept
-#'            betaspline = matrix(rep(0, 18), nrow = 2)) # state process spline coefs
-#'           
-#' # data object with initial penalty strength lambda
-#' dat = list(step = data$step, # step length
-#'            tod = data$tod, # time of day covariate
-#'            N = 2, # number of states
-#'            lambda = rep(100,2)) # initial penalty strength
-#'
-#' # building model matrices
-#' modmat = make_matrices(~ s(tod, bs = "cp"), 
-#'                        data = data.frame(tod = 1:24), 
-#'                        knots = list(tod = c(0,24))) # wrapping points
-#' dat$Z = modmat$Z # spline design matrix
-#' dat$S = modmat$S # penalty matrix
-#'
-#' # penalised negative log-likelihood function
-#' pnll = function(par) {
-#'   getAll(par, dat) # makes everything contained available without $
-#'   Gamma = tpm_g(Z, cbind(beta0, betaspline), ad = TRUE) # transition probabilities
-#'   delta = stationary_p(Gamma, t = 1, ad = TRUE) # initial distribution
-#'   mu = exp(logmu) # step mean
-#'   sigma = exp(logsigma) # step sd
-#'   # calculating all state-dependent densities
-#'   allprobs = matrix(1, nrow = length(step), ncol = N)
-#'   ind = which(!is.na(step)) # only for non-NA obs.
-#'   for(j in 1:N) allprobs[ind,j] = dgamma2(step[ind],mu[j],sigma[j])
-#'   -forward_g(delta, Gamma[,,tod], allprobs) +
-#'       penalty(betaspline, S, lambda) # this does all the penalization work
-#' }
-#'
-#' # model fitting
-#' mod = qreml_old(pnll, par, dat, random = "betaspline")
+#' # no example
 qreml_old = function(pnll, # penalized negative log-likelihood function
                  par, # initial parameter list
                  dat, # initial dat object, currently needs to be called dat!
@@ -837,6 +808,7 @@ qreml_old = function(pnll, # penalized negative log-likelihood function
 #' penalty(re, S, lambda)
 #' 
 #' # Full model-fitting example
+#' \donttest{
 #' data = trex[1:1000,] # subset
 #'
 #' # initial parameter list
@@ -870,11 +842,12 @@ qreml_old = function(pnll, # penalized negative log-likelihood function
 #'   ind = which(!is.na(step)) # only for non-NA obs.
 #'   for(j in 1:N) allprobs[ind,j] = dgamma2(step[ind],mu[j],sigma[j])
 #'   -forward_g(delta, Gamma[,,tod], allprobs) +
-#'       penalty(betaspline, S, lambda) # this does all the penalization work
+#'       penalty(betaspline, S, lambda) # this does all the penalisation work
 #' }
 #'
 #' # model fitting
 #' mod = qreml(pnll, par, dat, random = "betaspline")
+#' }
 penalty2 = function(re_coef, # coefficient vector/ matrix or list of coefficient vectors/ matrices
                     S, # always needs to be a list: matrix entries for smooths with one penalty matrix, list (length 2) entries for 2D tensorproducts
                     lambda)
@@ -907,7 +880,7 @@ penalty2 = function(re_coef, # coefficient vector/ matrix or list of coefficient
   ## Get the number of similar random effects for each distinct random effect
   re_lengths = sapply(re_coef, nrow)  # All elements are matrices now
   
-  ## find how many penalty strength pars are needed for ecah random effect
+  ## find how many penalty strength pars are needed for each random effect
   # 1: univariate smooth
   # >1: tensorproduct
   n_penalties = sapply(S, function(x){
@@ -1039,6 +1012,8 @@ penalty2 = function(re_coef, # coefficient vector/ matrix or list of coefficient
 #' @param method optimisation method to be used by \code{\link[stats:optim]{optim}}. Defaults to \code{"BFGS"}, but might be changed to \code{"L-BFGS-B"} for high-dimensional settings.
 #' @param conv_crit character, convergence criterion for the penalty strength parameters. Can be \code{"relchange"} (default) or \code{"gradient"}.
 #' @param joint_unc logical, if \code{TRUE}, joint \code{RTMB} object is returned allowing for joint uncertainty quantification
+#' @param spHess logical, if \code{TRUE}, sparse AD Hessian is used in each outer iteration. If your Hessian is large and sparse (many cross derivatives are 0), this will speed up the computations a lot. 
+#' If your Hessian is dense, this will slow down the computations slightly and might require significantly more memory.
 #' @param saveall logical, if \code{TRUE}, then all model objects from each iteration are saved in the final model object.
 #'
 #' @return model object of class 'qremlModel'. This is a list containing:
@@ -1113,6 +1088,7 @@ qreml <- function(pnll, # penalized negative log-likelihood function
                   method = "BFGS", # optimization method used by optim
                   control = list(), # control list for inner optimization
                   conv_crit = "relchange",
+                  spHess = FALSE, # use sparse Hessian instead of finite diff gradient
                   joint_unc = FALSE, # should joint object be returned?
                   saveall = FALSE # save all intermediate models?
                   )
@@ -1218,6 +1194,15 @@ qreml <- function(pnll, # penalized negative log-likelihood function
                    map = map) # silent and replacing with own prints
   
   newpar <- obj$par # saving initial parameter value as vector to initialize optimization in loop
+  
+  # use sparse Hessian?
+  if(spHess) {
+    Tape <- RTMB::GetTape(obj, name = "ADFun") # get the Tape
+    if(silent < 2) cat("Constructing sparse Hessian\n")
+    obj$spHess <- Tape$jacfun(sparse = TRUE)$jacfun(sparse = TRUE) # construct sparse Hessian function from Tape
+    rm(Tape) # removing Tape to save memory
+    # obj$gr <- function(p) as.matrix(spGrad(p))
+  }
   
   # gradient printing
   counter_env <- new.env() # create environment to hold a counter
@@ -1367,8 +1352,12 @@ qreml <- function(pnll, # penalized negative log-likelihood function
     
     # evaluating current penalised Hessian
     if(silent == 0) cat("evaluating Hessian...\n")
-    J <- stats::optimHess(opt$par, obj$fn, obj$gr)
-    J <- (J + t(J))/2 # force symmetric
+    if(spHess) {
+      J <- obj$spHess(opt$par)
+    } else{
+      J <- stats::optimHess(opt$par, obj$fn, obj$gr)
+      J <- (J + t(J))/2 # force symmetric
+    }
     
     # build big penalty matrix from current lambdas
     bigS <- build_bigS(Lambdas[[k]])
@@ -1384,6 +1373,7 @@ qreml <- function(pnll, # penalized negative log-likelihood function
     #   H <- H + diag(eps, nrow(H))
     #   R <- chol(H)
     # }
+    
     H_inv <- safe_chol_inv(H) # chol2inv(R)
     
     # rebuild penalised Hessin pd for inversion
@@ -1558,7 +1548,7 @@ qreml <- function(pnll, # penalized negative log-likelihood function
       # relative change of lambda
       rel_change <- abs((lambda - unlist(Lambdas[[k]])) / unlist(Lambdas[[k]]))
       
-      if(k > 3 & (all(rel_change[convInd_unmapped] < tol)) | opt$counts[2] < 3) {
+      if(k > 3 & (all(rel_change[convInd_unmapped] < tol) | opt$counts[2] < 3)) {
         if(silent < 2){
           cat("Converged\n")
         }
@@ -1591,7 +1581,11 @@ qreml <- function(pnll, # penalized negative log-likelihood function
                       method = method, hessian = FALSE, # return hessian in the end
                       control = control)
   
-  J <- stats::optimHess(opt$par, obj$fn, obj$gr)
+  if(spHess) {
+    J <- as.matrix(obj$spHess(opt$par))
+  } else {
+    J <- stats::optimHess(opt$par, obj$fn, obj$gr)
+  }
   
   if(silent == 0){
     gr = obj$gr(opt$par)
@@ -1945,7 +1939,8 @@ summary.qremlModel <- function(object, ...) {
                 paste0("all_", object$psname), "parname", object$parname, paste0("relist_", object$parname), 
                 paste0("map_", object$psname), "psname", paste0(object$parname, "_vec"), 
                 "edf", "Hessian_conditional", "obj_joint",
-                "beta", "delta", "Gamma", "lambda", "llk", "n_fixpar", "df", "nobs")
+                "beta", "delta", "Gamma", "lambda", "llk", "n_fixpar", "df", "nobs",
+                "llk_restricted", "allmods")
   
   remaining_names <- setdiff(names(object), excluded)
   
