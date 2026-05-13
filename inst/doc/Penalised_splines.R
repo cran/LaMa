@@ -56,9 +56,9 @@ pnll = function(par) {
 
 ## ----todpar2------------------------------------------------------------------
 par = list(logmu = log(c(0.3, 2.5)), # state-dependent mean step
-           logsigma = log(c(0.2, 1.5)), # state-dependent sd step
-           logkappa = log(c(0.2, 1.5)), # state-dependent concentration angle
-           beta0 = c(-2, 2), # state process intercepts
+           logsigma = log(c(0.3, 2)), # state-dependent sd step
+           logkappa = log(c(0.1, 2)), # state-dependent concentration angle
+           beta0 = c(-2, -2), # state process intercepts
            betaSpline = matrix(rep(0, 2*(ncol(Z)-1)), nrow = 2)) # spline coefs
 
 dat = list(step = trex$step, # observed steps

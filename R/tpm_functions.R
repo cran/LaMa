@@ -10,37 +10,102 @@
 #'
 #' @family transition probability matrix functions
 #'
-#' @param param unconstrained parameter vector of length N*(N-1) where N is the number of states of the Markov chain
-#' @param byrow logical indicating if the transition probability matrix should be filled by row
+#' @param beta 
+#' parameters; either
+#'   \itemize{
+#'      \item a vector of length \code{nStates * (nStates-1)}, or
+#'      \item a matrix of dimension \code{c(nStates * (nStates-1), p+1)} if design matrix \code{Z} is also provided.
+#'   }
 #'
+#' @param Z
+#' optional covariate design matrix with or without intercept column, i.e. of dimension \code{c(nObs, p)} or \code{c(nObs, p+1)}.
+#' If provided, \code{beta} needs to be a matrix of dimension \code{c(nStates * (nStates-1), p+1)}.
+#' 
+#' @param Eta 
+#' optional pre-calculated matrix of linear predictors of dimension \code{c(nObs, nStates * (nStates-1))}.
+#' If provided, \code{Z} and \code{beta} will be ignored.
+#'
+#' @param byrow 
+#' logical indicating if each transition probability matrix should be filled by row.
 #' Defaults to \code{FALSE}, but should be set to \code{TRUE} if one wants to work with a matrix of beta parameters returned by popular HMM packages like \code{moveHMM}, \code{momentuHMM}, or \code{hmmTMB}.
-#' @param ref Optional integer vector of length N giving, for each row, the column index of the reference state 
-#' (its predictor is fixed to 0). Defaults to the diagonal (\code{ref = 1:N}).
 #'
-#' @return Transition probability matrix of dimension c(N,N)
+#' @param ref 
+#' optional integer vector of length \code{nStates} giving, for each row, the column index of the reference state 
+#' (its predictor is fixed to 0). Defaults to the diagonal (\code{ref = 1:nStates}).
+#'
+#' @param ad 
+#' logical; whether to use automatic differentiation. Determined automatically — for debugging only.
+#' 
+#' @param report 
+#' logical; if \code{TRUE} (default), \code{delta}, \code{Gamma}, \code{allprobs}, and \code{trackID} are reported from the fitted model. Requires \code{ad = TRUE}. 
+#' 
+#' @param param 
+#' depricated, please use argument \code{beta} instead.
+#' 
+#' @return Transition probability matrix of dimension \code{c(nStates, nStates)} or array of such matrices of dimension \code{c(nStates, nStates, nObs)} if \code{Z} or \code{Eta} is provided.
 #' @export
 #' @import RTMB
 #'
 #' @examples
-#' # 2 states: 2 free off-diagonal elements
-#' par1 = rep(-1, 2)
-#' Gamma1 = tpm(par1)
+#' ## homogeneous Markov chain
+#' # 2 states: 2 = 2*(2-1) free off-diagonal elements
+#' par <- rep(-2, 2)
+#' Gamma <- tpm(par)
+#' # 3 states: 6 = 3*(3-1) free off-diagonal elements
+#' par <- rep(-3, 6)
+#' Gamma <- tpm(par)
+#' # 4 states: 12 = 4*(4-1) free off-diagonal elements
+#' par <- rep(-4, 12)
+#' Gamma <- tpm(par)
 #' 
-#' # 3 states: 6 free off-diagonal elements
-#' par2 = rep(-2, 6)
-#' Gamma2 = tpm(par2)
-tpm <- function(param, byrow = FALSE, ref = NULL) {
+#' ## inhomogeneous Markov chain
+#' # t.p.m. depends on covariates
+#' z1 <- runif(100); z2 <- runif(100) # 2 covariates
+#' Z <- cbind(1, z1, z2) # design matrix
+#' beta0 <- c(-2, -2); beta1 = c(1, -2); beta2 = c(2, -1) # coefficients for intercept and covariates
+#' beta <- cbind(beta0, beta1, beta2) # coefficient matrix; with intercepts!
+#' Gamma <- tpm(beta, Z) # array with 100 slices
+tpm <- function(
+    beta, 
+    Z = NULL, 
+    Eta = NULL,
+    byrow = FALSE, 
+    ref = NULL,
+    ad = NULL,
+    report = TRUE,
+    param = NULL
+) {
   
-  "[<-" <- ADoverload("[<-") # overloading assignment operators, currently necessary
-  "c" <- ADoverload("c")
-  "diag<-" <- ADoverload("diag<-")
+  if(!is.null(param)) {
+    beta <- param
+    message("Argument 'param' is deprecated. Please use 'beta' instead.")
+  }
   
-  K <- length(param)
+  # potentially escape to tpm_g if matrix of linear predictors or design matrix is provided
+  if(!is.null(Eta) && length(dim(Eta)) == 2) {
+    return(
+      tpm_g(Eta = Eta, byrow = byrow, ref = ref, ad = ad, report = report)
+    )
+  }
+  if(!is.null(Z) && length(dim(Z)) == 2) {
+    if(!is.matrix(beta)) {
+      stop("If a design matrix is provided, beta must be a matrix of coefficients.")
+    }
+    return(
+      tpm_g(Z = Z, beta = beta, byrow = byrow, ref = ref, ad = ad, report = report)
+    )
+  }
+  
+  # "[<-" <- ADoverload("[<-") # overloading assignment operators, currently necessary
+  # "c" <- ADoverload("c")
+  # "diag<-" <- ADoverload("diag<-")
+  
+  K <- length(beta)
   # for N > 1: N*(N-1) is bijective with solution
   N <- 0.5 + sqrt(0.25 + K)
   int_N <- abs(N - round(N)) < .Machine$double.eps^0.5
   if (!int_N) {
-    stop("The length of param is not compatible with a transition probability matrix (N*(N-1) for integer N).")
+    stop("The length of beta is not compatible with a transition probability matrix (nStates * (nStates-1) for integer nStates).")
   }
   N <- as.integer(round(N))
   
@@ -52,7 +117,7 @@ tpm <- function(param, byrow = FALSE, ref = NULL) {
     }
   }
   
-  expParam <- exp(param)
+  expParam <- exp(beta)
   
   Gamma <- AD(matrix(1, N, N))
   ind <- 1
@@ -94,33 +159,48 @@ tpm <- function(param, byrow = FALSE, ref = NULL) {
 #' 
 #' @family transition probability matrix functions
 #'
-#' @param Z covariate design matrix with or without intercept column, i.e. of dimension c(n, p) or c(n, p+1)
-#' 
-#' If \code{Z} has only p columns, an intercept column of ones will be added automatically.
-#' @param beta matrix of coefficients for the off-diagonal elements of the transition probability matrix
-#' 
-#' Needs to be of dimension c(N*(N-1), p+1), where the first column contains the intercepts.
-#' @param Eta optional pre-calculated linear predictor matrix of dimension c(n, N*(N-1)). 
-#' 
-#' Usually, \code{Eta} is calculated as \code{Z \%*\% t(beta)}. If provided, no \code{Z} and \code{beta} are necessary and will be ignored.
-#' @param byrow logical indicating if each transition probability matrix should be filled by row
-#'  
-#' Defaults to \code{FALSE}, but should be set to \code{TRUE} if one wants to work with a matrix of beta parameters returned by popular HMM packages like \code{moveHMM}, \code{momentuHMM}, or \code{hmmTMB}.
-#' @param ref Optional integer vector of length N giving, for each row, the column index of the reference state 
-#' (its predictor is fixed to 0). Defaults to the diagonal (\code{ref = 1:N}).
-#' @param ad optional logical, indicating whether automatic differentiation with \code{RTMB} should be used. By default, the function determines this itself.
-#' @param report logical, indicating whether the coefficient matrix \code{beta} should be reported from the fitted model. Defaults to \code{TRUE}, but only works if \code{ad = TRUE}.
-#' @param sparse logical, indicating whether sparsity in the rows of \code{Z} should be exploited.
+#' @param Z 
+#' Covariate design matrix with or without intercept column, i.e. of dimension \code{c(nObs, p)} or \code{c(nObs, p+1)}.
+#' If not provided, intercept column is added automatically.
 #'
-#' @return array of transition probability matrices of dimension c(N,N,n)
+#' @param beta 
+#' Matrix of coefficients for the off-diagonal elements of the transition probability matrix 
+#' of dimension \code{c(nStates * (nStates-1), p+1)}. First columns contains the intercepts.
+#' 
+#' @param Eta 
+#' optional pre-calculated matrix of linear predictors of dimension \code{c(nObs, nStates * (nStates-1))}.
+#' If provided, no \code{Z} and \code{beta} are necessary and will be ignored.
+#' 
+#' @param byrow 
+#' logical indicating if each transition probability matrix should be filled by row.
+#' Defaults to \code{FALSE}, but should be set to \code{TRUE} if one wants to work with a matrix of beta parameters returned by popular HMM packages like \code{moveHMM}, \code{momentuHMM}, or \code{hmmTMB}.
+#' 
+#' @param ref 
+#' optional integer vector of length \code{nStates} giving, for each row, the column index of the reference state 
+#' (its predictor is fixed to 0). Defaults to the diagonal (\code{ref = 1:nStates}).
+#' 
+#' @param ad 
+#' logical; whether to use automatic differentiation. Determined automatically — for debugging only.
+#' 
+#' @param report 
+#' logical; if \code{TRUE} (default), \code{delta}, \code{Gamma}, \code{allprobs}, and \code{trackID} are reported from the fitted model. Requires \code{ad = TRUE}. 
+#' 
+#' @param sparse 
+#' logical, indicating whether sparsity in the rows of \code{Z} should be exploited.
+#'
+#' @return array of transition probability matrices of dimension \code{c(nStates, nStates, nObs)}
 #' @export
 #' @import RTMB
 #' @importFrom stats na.omit
 #'
 #' @examples
-#' Z = matrix(runif(200), ncol = 2)
-#' beta = matrix(c(-1, 1, 2, -2, 1, -2), nrow = 2, byrow = TRUE)
-#' Gamma = tpm_g(Z, beta)
+#' ## inhomogeneous Markov chain
+#' # t.p.m. depends on covariates
+#' z1 <- runif(100); z2 <- runif(100) # 2 covariates
+#' Z <- cbind(1, z1, z2) # design matrix
+#' beta0 <- c(-2, -2); beta1 = c(1, -2); beta2 = c(2, -1) # coefficients for intercept and covariates
+#' beta <- cbind(beta0, beta1, beta2) # coefficient matrix; with intercepts!
+#' #' Gamma <- tpm(beta, Z) # array with 100 slices
 tpm_g = function(Z, beta, 
                  Eta = NULL, 
                  byrow = FALSE, 
@@ -177,19 +257,18 @@ tpm_g = function(Z, beta,
 
   # if ad is not explicitly provided, check if delta is an advector
   if(is.null(ad)){
-    if(is.null(Eta)) {
-      # check if delta has any of the allowed classes
-      if(!any(class(beta) %in% c("advector", "numeric", "matrix", "array"))){
-        stop("beta needs to be either a matrix or advector.")
-      }
-    } else{
-      if(!inherits(Eta, c("advector", "numeric", "matrix", "array"))) {
-        stop("Eta needs to be either a matrix or advector.")
-      }
-    }
+    # if(is.null(Eta)) {
+    #   # check if delta has any of the allowed classes
+    #   if(!any(class(beta) %in% c("advector", "numeric", "matrix", "array"))){
+    #     stop("beta needs to be either a matrix or advector.")
+    #   }
+    # } else{
+    #   if(!inherits(Eta, c("advector", "numeric", "matrix", "array"))) {
+    #     stop("Eta needs to be either a matrix or advector.")
+    #   }
+    # }
     
-    # if delta is advector, run ad version of the function
-    # ad = inherits(beta, "advector")
+    # determine whether to use AD
     ad <- ad_context()
   }
   
@@ -199,12 +278,13 @@ tpm_g = function(Z, beta,
       Eta <- Z %*% t(beta) # linear predictor matrix
     }
     
+    Eta <- as.matrix(Eta)
     Gamma <- tpm_g3_cpp(Eta, N, ref, byrow) # C++ version
     
   } else if(ad) {
-    "[<-" <- ADoverload("[<-") # overloading assignment operators, currently necessary
-    "c" <- ADoverload("c")
-    "diag<-" <- ADoverload("diag<-")
+    # "[<-" <- ADoverload("[<-") # overloading assignment operators, currently necessary
+    # "c" <- ADoverload("c")
+    # "diag<-" <- ADoverload("diag<-")
     
     # if(report) {
     #   RTMB::REPORT(beta) # reporting coefficient matrix
@@ -400,8 +480,8 @@ tpm_g2 <- function(Z,
     Gamma = tpm_g2_cpp(Eta, N, byrow, ref) # C++ version
     
   } else if(ad) {
-    "[<-" <- ADoverload("[<-") # overloading assignment operators, currently necessary
-    "c" <- ADoverload("c")
+    # "[<-" <- ADoverload("[<-") # overloading assignment operators, currently necessary
+    # "c" <- ADoverload("c")
     # "diag<-" <- ADoverload("diag<-")
     
     expEta = exp(Eta)
@@ -446,10 +526,10 @@ tpm_g2 <- function(Z,
 #' \deqn{\Gamma_t = \Gamma^{(t)} \Gamma^{(t+1)} \dots \Gamma^{(t+L-1)}} for all \eqn{t = 1, \dots, L.}
 #' This function calculates the matrix above efficiently as a preliminery step to calculating the periodically stationary distribution.
 #' 
-#' @param Gamma array of transition probability matrices of dimension c(N,N,L).
+#' @param Gamma array of transition probability matrices of dimension \code{c(nStates, nStates, L)}.
 #' @param t integer index of the time point in the cycle, for which to calculate the thinned transition probility matrix
 #'
-#' @return thinned transition probabilty matrix of dimension c(N,N)
+#' @return thinned transition probabilty matrix of dimension \code{c(nStates, nStates)}
 #' @export
 #'
 #' @examples
@@ -487,7 +567,7 @@ tpm_thinned = function(Gamma, t){
 #' 
 #' @param beta matrix of coefficients for the off-diagonal elements of the transition probability matrix
 #' 
-#' Needs to be of dimension c(N *(N-1), 2*degree+1), where the first column contains the intercepts.
+#' Needs to be of dimension \code{c(nStates *(nStates-1), 2*degree+1)}, where the first column contains the intercepts.
 #' @param degree degree of the trigonometric link function
 #' 
 #' For each additional degree, one sine and one cosine frequency are added.
@@ -501,7 +581,7 @@ tpm_thinned = function(Gamma, t){
 #' @param ad optional logical, indicating whether automatic differentiation with RTMB should be used. By default, the function determines this itself.
 #' @param report logical, indicating whether the coefficient matrix \code{beta} should be reported from the fitted model. Defaults to \code{TRUE}, but only works if \code{ad = TRUE}.
 #'
-#' @return array of transition probability matrices of dimension c(N,N,length(tod))
+#' @return array of transition probability matrices of dimension \code{c(nStates, nStates, length(tod))}
 #' @export
 #'
 #' @examples
@@ -562,16 +642,23 @@ tpm_p = function(tod = 1:24, L=24, beta, degree = 1, Z = NULL, byrow = FALSE, ad
 #' 
 #' @family transition probability matrix functions
 #'
-#' @param Q infinitesimal generator matrix of the continuous-time Markov chain of dimension c(N,N)
-#' @param timediff time differences between observations of length n-1 when based on n observations
-#' @param rates optional vector of state-dependent rates for MM(M)PP fitting. 
+#' @param Q 
+#' infinitesimal generator matrix of the continuous-time Markov chain of dimension \code{c(nStates, nStates)}
+#' 
+#' @param timediff 
+#' time differences between observations of length \code{nObs}-1 when based on \code{nObs} observations
+#' 
+#' @param rates 
+#' optional vector of state-dependent rates for MM(M)PP fitting. 
 #' For the MM(M)PP likelihood, the matrices needed in the forward algorithm are \eqn{\exp((Q - \Lambda) \Delta t)}, where \eqn{\Lambda} is a diagonal matrix with the state-dependent rates on the diagonal.
-#' @param ad optional logical, indicating whether automatic differentiation with \code{RTMB} should be used. By default, the function determines this itself.
-#' @param report logical, indicating whether \code{Q} should be reported from the fitted model. Defaults to \code{TRUE}, but only works if \code{ad = TRUE}.
+#' 
+#' @param ad 
+#' optional logical, indicating whether automatic differentiation with \code{RTMB} should be used. By default, the function determines this itself.
+#' 
+#' @param report 
+#' logical, indicating whether \code{Q} should be reported from the fitted model. Defaults to \code{TRUE}, but only works if \code{ad = TRUE}.
 #'
-#' @return array of continuous-time transition matrices of dimension c(N,N,n-1)
-#' @export
-#' @import RTMB
+#' @return array of continuous-time transition matrices of dimension \code{c(nStates, nStates, nObs-1)}
 #'
 #' @examples
 #' # building a Q matrix for a 3-state cont.-time Markov chain
@@ -582,7 +669,13 @@ tpm_p = function(tod = 1:24, L=24, beta, degree = 1, Z = NULL, byrow = FALSE, ad
 #'
 #' # compute all transition matrices
 #' Gamma = tpm_cont(Q, timediff)
-tpm_cont <- function(Q, timediff, rates = NULL, ad = NULL, report = TRUE){
+#' 
+#' @name tpm_ct
+
+#' @rdname tpm_ct
+#' @export
+#' @import RTMB
+tpm_ct <- function(Q, timediff, rates = NULL, ad = NULL, report = TRUE){
   
   # report quantities for easy use later
   if(report) {
@@ -594,41 +687,54 @@ tpm_cont <- function(Q, timediff, rates = NULL, ad = NULL, report = TRUE){
     }
   }
   
+  N <- dim(Q)[1]
+  if(dim(Q)[2] != N) {
+    stop("Q needs to be a square matrix.")
+  }
+  
   if(!is.null(rates)) {
-    if(length(rates) != nrow(Q)) {
+    if(length(rates) != N) {
       stop("Length of rates needs to be equal to the number of states.")
     }
     
-    "diag<-" <- ADoverload("diag<-")
-    Q <- Q - diag(rates)
+    # "diag<-" <- ADoverload("diag<-")
+    if(is.matrix(Q)) {
+      Q <- Q - diag(rates)
+    } else if(is.array(Q) && length(dim(Q)) == 3){
+      for(i in seq_len(N)) {
+        Q[i,i, ] <- Q[i,i,] - rates[i]
+      }
+    }
   }
   
   # if ad is not explicitly provided, check if delta is an advector
   if(is.null(ad)){
-    # check if Q has any of the allowed classes
-    if(!any(class(Q) %in% c("advector", "numeric", "matrix", "array"))){
-      stop("Q needs to be either a vector, matrix or advector.")
-    }
-    
-    # if Q is advector, run ad version of the function
-    # ad = inherits(Q, "advector")
+    # determine whether to use AD
     ad <- ad_context()
   }
   
   if(!ad) {
     
-    Qube = semigroup_cpp(Q, timediff) # C++ version
-    
+    if(is.matrix(Q)) {
+      Qube <- semigroup_cpp(Q, timediff) # C++ version
+    } else {
+      Qube <- semigroup_g_cpp(Q, timediff) # C++ version
+    }
+
   } else if(ad) { # ad version with RTMB
     "[<-" <- ADoverload("[<-") # currently necessary
     
-    n = length(timediff)
-    N = nrow(Q)
+    n <- length(timediff)
+    Qube = array(0, dim = c(N, N, n))
     
-    Qube = array(NaN, dim = c(N, N, n))
-    
-    for(t in 1:n){
-      Qube[,,t] = as.matrix(Matrix::expm(Q * timediff[t])) # Matrix::expm for AD
+    if(is.matrix(Q)) {
+      for(t in 1:n){
+        Qube[,,t] = as.matrix(Matrix::expm(Q * timediff[t])) # Matrix::expm for AD
+      }
+    } else{
+      for(t in 1:n){
+        Qube[,,t] = as.matrix(Matrix::expm(Q[,,t] * timediff[t])) # Matrix::expm for AD
+      }
     }
   }
   
@@ -639,21 +745,59 @@ tpm_cont <- function(Q, timediff, rates = NULL, ad = NULL, report = TRUE){
   colnames(Qube) <- statenames
   
   attr(Qube, "time") <- "continuous"
-  Qube
+  
+  return(Qube)
 }
 
+#' @rdname tpm_ct
+#' @export
+#' @import RTMB
+tpm_cont <- function(
+    Q, 
+    timediff,
+    rates = NULL, 
+    ad = NULL, 
+    report = TRUE) {
+  tpm_ct(Q=Q, timediff=timediff, rates=rates, ad=ad, report=report)
+} 
 
 #' Build the generator matrix of a continuous-time Markov chain
 #' 
 #' This function builds the \strong{infinitesimal generator matrix} for a \strong{continuous-time Markov chain} from an unconstrained parameter vector.
 #' 
+#' @details
+#' Off-diagonal entries are calculated as \eqn{\exp(\beta_i)} to ensure positivity. The diagonal entries are then set to the negative row sums, which is required for generator matrices.
+#'
+#' If a design matrix \code{Z} or a matrix of linear predictors \code{Eta} is provided, the function will automatically call \code{\link{generator_g}} to build the generator matrix based on the design matrix and coefficient matrix.
+#' In that case, the argument \code{beta} needs to be a matrix of coefficients of dimension \code{c(nStates * (nStates-1), p+1)}, where the first column contains the intercepts.
+#'
 #' @family transition probability matrix functions
 #' 
-#' @param param unconstrained parameter vector of length N*(N-1) where N is the number of states of the Markov chain
-#' @param byrow logical indicating if the transition probability matrix should be filled by row
-#' @param report logical, indicating whether the generator matrix Q should be reported from the fitted model. Defaults to \code{TRUE}, but only works if when automatic differentiation with \code{RTMB} is used.
+#' @param beta 
+#' parameters; either
+#'   \itemize{
+#'      \item a vector of length \code{nStates * (nStates-1)}, or
+#'      \item a matrix of dimension \code{c(nStates * (nStates-1), p+1)} if design matrix \code{Z} is also provided.
+#'   }
 #'
-#' @return infinitesimal generator matrix of dimension c(N,N)
+#' @param Z
+#' optional covariate design matrix with or without intercept column, i.e. of dimension \code{c(nObs, p)} or \code{c(nObs, p+1)}.
+#' If provided, \code{beta} needs to be a matrix of dimension \code{c(nStates * (nStates-1), p+1)}.
+#' 
+#' @param Eta 
+#' optional pre-calculated matrix of linear predictors of dimension \code{c(nObs, nStates * (nStates-1))}.
+#' If provided, \code{Z} and \code{beta} will be ignored.
+#' 
+#' @param byrow 
+#' logical indicating if the generator matrix should be filled by row
+#'
+#' @param report 
+#' logical, indicating whether the generator matrix \code{Q} should be reported from the fitted model. Defaults to \code{TRUE}, but only works if when automatic differentiation with \code{RTMB} is used.
+#'
+#' @param param 
+#' depricated, please use argument \code{beta} instead.
+#' 
+#' @return infinitesimal generator matrix of dimension \code{c(nStates, nStates)} or array of such matrices of dimension \code{c(nStates, nStates, nObs)} if \code{Z} or \code{Eta} is provided.
 #' @export
 #' @import RTMB
 #'
@@ -662,24 +806,187 @@ tpm_cont <- function(Q, timediff, rates = NULL, ad = NULL, report = TRUE){
 #' generator(rep(-1, 2))
 #' # 3 states: 6 free off-diagonal elements
 #' generator(rep(-2, 6))
-generator = function(param, byrow = FALSE, report = TRUE) {
+generator <- function(
+    beta,
+    Z = NULL, 
+    Eta = NULL,
+    byrow = FALSE, 
+    report = TRUE,
+    param = NULL
+) {
+  
+  if(!is.null(param)) {
+    beta <- param
+    message("Argument 'param' is deprecated. Please use 'beta' instead.")
+  }
+  
+  # potentially escape to tpm_g if matrix of linear predictors or design matrix is provided
+  if(!is.null(Eta) && is.matrix(Eta)) {
+    return(
+      generator_g(Eta = Eta, byrow = byrow, report = report)
+    )
+  }
+  if(!is.null(Z) && is.matrix(Z)) {
+    if(!is.matrix(beta)) {
+      stop("If a design matrix is provided, beta must be a matrix of coefficients.")
+    }
+    return(
+      generator_g(Z = Z, beta = beta, byrow = byrow, report = report)
+    )
+  }
   
   "[<-" <- ADoverload("[<-") # currently necessary
   
-  K = length(param)
+  K <- length(beta)
   # for N > 1: N*(N-1) is bijective with solution
-  N = as.integer(0.5 + sqrt(0.25 + K), 0)
+  N <- 0.5 + sqrt(0.25 + K)
+  int_N <- abs(N - round(N)) < .Machine$double.eps^0.5
+  if (!int_N) {
+    stop("The length of beta is not compatible with a generator matrix (nStates * (nStates-1) for integer nStates).")
+  }
+  N <- as.integer(round(N))
   
-  Q = diag(N)
-  Q[!Q] = exp(param)
-  diag(Q) = 0
+  expParam <- exp(beta)
   
-  if(byrow) Q = t(Q) # transpose if necessary
+  Q <- AD(matrix(0, N, N))
+  ind <- 1
+  for(i in 1:N) {
+    for(j in 1:N) {
+      if(!byrow){
+        if(i != j){       # column-wise filling
+          Q[j, i] <- expParam[ind]
+          ind <- ind + 1
+        }
+      } else {
+        if(j != i){       # row-wise filling
+          Q[i, j] <- expParam[ind]
+          ind <- ind + 1
+        }
+      }
+    }
+  }
   
-  diag(Q) = -rowSums(Q)
+  # Normalize rows
+  diag(Q) <- -rowSums(Q)
+
+  # naming
+  statenames <- paste0("S", 1:N)
+  rownames(Q) <- statenames
+  colnames(Q) <- statenames
   
-  if(report) {
-    RTMB::REPORT(Q)
+  return(Q)
+}
+
+
+#' Build generator matrices of a continuous-time Markov chain
+#' 
+#' This function builds \strong{infinitesimal generator matrices} for a \strong{continuous-time Markov chain} based on a design matrix and coefficient matrix.
+#' 
+#' @details
+#' Off-diagonal entries are calculated as \eqn{\exp(Z \beta_i)} to ensure positivity. The diagonal entries are then set to the negative row sums, which is required for generator matrices.
+#' 
+#' 
+#' @family transition probability matrix functions
+#' 
+#' @param Z 
+#' Covariate design matrix with or without intercept column, i.e. of dimension \code{c(nObs, p)} or \code{c(nObs, p+1)}. If not provided, intercept column is added automatically.
+#'
+#' @param beta 
+#' Matrix of coefficients for the off-diagonal elements of the generator matrix 
+#' of dimension \code{c(nStates * (nStates-1), p+1)}. First columns contains the intercepts.
+#' 
+#' @param Eta 
+#' optional pre-calculated matrix of linear predictors of dimension \code{c(nObs, nStates * (nStates-1))}.
+#' If provided, no \code{Z} and \code{beta} are necessary and will be ignored.
+#'
+#' @param byrow 
+#' logical indicating if the generator matrices should be filled by row
+#'
+#' @param report 
+#' logical, indicating whether the generator matrices \code{Q} should be reported from the fitted model. Defaults to \code{TRUE}, but only works if when automatic differentiation with \code{RTMB} is used.
+#' 
+#' @return array of infinitesimal generator matrices of dimension \code{c(nStates, nStates, nObs)}
+#' @export
+#' @import RTMB
+#'
+#' @examples
+#' # 2 states: 2 free off-diagonal elements
+#' generator(rep(-1, 2))
+#' # 3 states: 6 free off-diagonal elements
+#' generator(rep(-2, 6))
+generator_g <- function(
+    Z, 
+    beta, 
+    Eta = NULL, 
+    byrow = FALSE, 
+    report = TRUE
+){
+  
+  "[<-" <- ADoverload("[<-") # currently necessary
+  
+  if(is.null(Eta)) {
+    K <- nrow(beta)
+    p <- ncol(beta) - 1
+  } else {
+    K <- ncol(Eta)
+  }
+  
+  N <- 0.5 + sqrt(0.25 + K)
+  int_N <- abs(N - round(N)) < .Machine$double.eps^0.5
+  if (!int_N) {
+    stop("The number of rows of beta is not compatible with a transition probability matrix (N*(N-1) for integer N).")
+  }
+  N <- as.integer(round(N))
+  
+  if(is.null(Eta)) {
+    Z <- as.matrix(Z)
+    if(ncol(Z) == p){
+      Z = cbind(1, Z) # adding intercept column
+    } else if(ncol(Z) != p + 1){
+      stop("The dimensions of Z and beta do not match.")
+    }
+    
+    # report quantities for easy use later
+    if(report) {
+      # Setting colnames for beta: Inherit colnames from Z
+      colnames(beta) <- colnames(Z)
+      if(is.null(rownames(beta))){
+        # Setting rownames: depends on byrow
+        names <- outer(paste0("S", 1:N, ">"), paste0("S", 1:N), FUN = paste0) # matrix
+        diag(names) <- NA
+        rownames(beta) <- na.omit(if (byrow) c(t(names)) else c(names))
+      }
+      REPORT(beta)
+    }
+    
+    Eta <- Z %*% t(beta)
+  }
+    
+  expEta <- exp(Eta)
+  
+  Q <- AD(array(0, dim = c(N, N, nrow(expEta))))
+  
+  ## Loop over entries (stuff over time happens vectorised which speeds up the tape)
+  col_ind <- 1
+  for(i in seq_len(N)){       # loop over rows
+    for(j in seq_len(N)){     # loop over columns
+      if(!byrow){
+        if(i != j){           # column-wise filling
+          Q[j, i, ] <- expEta[, col_ind]
+          col_ind <- col_ind + 1
+        }
+      } else {
+        if(j != i){           # row-wise filling
+          Q[i, j, ] <- expEta[, col_ind]
+          col_ind <- col_ind + 1
+        }
+      }
+    }
+  }
+  
+  # Set diagonal entry to - rowsum
+  for(i in seq_len(N)){
+    Q[i, i, ] <- -colSums(Q[i, , ])
   }
   
   # naming
@@ -687,8 +994,11 @@ generator = function(param, byrow = FALSE, report = TRUE) {
   rownames(Q) <- statenames
   colnames(Q) <- statenames
   
-  Q
+  return(Q)
 }
+
+
+
 
 
 
@@ -703,18 +1013,18 @@ generator = function(param, byrow = FALSE, report = TRUE) {
 #' This function builds such an embedded/ conditional transition probability matrix from an unconstrained parameter vector. 
 #' For each row of the matrix, the inverse multinomial logistic link is applied.
 #' 
-#' For a matrix of dimension c(N,N), the number of free off-diagonal elements is N*(N-2), hence also the length of \code{param}.
+#' For a matrix of dimension \code{c(nStates, nStates)}, the number of free off-diagonal elements is \code{nStates * (nStates-2)}, hence also the length of \code{param}.
 #' This means, for 2 states, the function needs to be called without any arguments, for 3-states with a vector of length 3, for 4 states with a vector of length 8, etc.
 #'
 #' Compatible with automatic differentiation by \code{RTMB}
 #' 
 #' @family transition probability matrix functions
 #'
-#' @param param unconstrained parameter vector of length N*(N-2) where N is the number of states of the Markov chain
+#' @param param unconstrained parameter vector of length \code{nStates * (nStates-2)}
 #'
 #' If the function is called without \code{param}, it will return the conditional transition probability matrix for a 2-state HSMM, which is fixed with 0 diagonal entries and off-diagonal entries equal to 1.
 #'
-#' @return embedded/ conditional transition probability matrix of dimension c(N,N)
+#' @return embedded/ conditional transition probability matrix of dimension \code{c(nStates, nStates)}
 #' @export
 #' @import RTMB
 #'
@@ -764,22 +1074,22 @@ tpm_emb = function(param = NULL){
 #' It builds all embedded/ conditional transition probability matrices based on a design and parameter matrix.
 #' For each row of the matrix, the inverse multinomial logistic link is applied.
 #' 
-#' For a matrix of dimension c(N,N), the number of free off-diagonal elements is N*(N-2) which determines the number of rows of the parameter matrix.
+#' For a matrix of dimension \code{c(nStates, nStates)}, the number of free off-diagonal elements is \code{nStates * (nStates-2)} which determines the number of rows of the parameter matrix.
 #'
 #' Compatible with automatic differentiation by \code{RTMB}
 #' 
 #' @family transition probability matrix functions
 #' 
-#' @param Z covariate design matrix with or without intercept column, i.e. of dimension c(n, p) or c(n, p+1)
+#' @param Z covariate design matrix with or without intercept column, i.e. of dimension \code{c(nObs, p)} or \code{c(nObs, p+1)}
 #'
-#' If \code{Z} has only p columns, an intercept column of ones will be added automatically.
+#' If \code{Z} has only \code{p} columns, an intercept column of ones will be added automatically.
 #' @param beta matrix of coefficients for the off-diagonal elements of the embedded transition probability matrix
 #'
-#' Needs to be of dimension c(N*(N-2), p+1), where the first column contains the intercepts.
-#' p can be 0, in which case the model is homogeneous.
+#' Needs to be of dimension \code{c(nStates * (nStates-2), p+1)}, where the first column contains the intercepts.
+#' \code{p} can be 0, in which case the model is homogeneous.
 #' @param report logical, indicating whether the coefficient matrix beta should be reported from the fitted model. Defaults to \code{TRUE}.
 #'
-#' @return array of embedded/ conditional transition probability matrices of dimension c(N,N,n)
+#' @return array of embedded/ conditional transition probability matrices of dimension \code{c(nStates, nStates, nObs)}
 #' @export
 #' @import RTMB
 #'
@@ -846,9 +1156,9 @@ tpm_emb_g = function(Z, beta, report = TRUE){
 #' 
 #' This function computes the transition matrix to approximate a given HSMM by an HMM with a larger state space.
 #'
-#' @param omega embedded transition probability matrix of dimension c(N,N) as computed by \code{\link{tpm_emb}}.
-#' @param dm state dwell-time distributions arranged in a list of length(N). Each list element needs to be a vector of length N_i, where N_i is the state aggregate size.
-#' @param Fm optional list of length N containing the cumulative distribution functions of the dwell-time distributions.
+#' @param omega embedded transition probability matrix of dimension \code{c(nStates, nStates)} as computed by \code{\link{tpm_emb}}.
+#' @param dm state dwell-time distributions arranged in a list of length \code{nStates}. Each list element needs to be a vector of length N_i, where N_i is the state aggregate size.
+#' @param Fm optional list of length \code{nStates} containing the cumulative distribution functions of the dwell-time distributions.
 #' @param sparse logical, indicating whether the output should be a \strong{sparse} matrix. Defaults to \code{TRUE}.
 #' @param eps rounding value: If an entry of the transition probabily matrix is smaller, than it is rounded to zero. Usually, this should not be changed.
 #'
@@ -931,8 +1241,8 @@ tpm_hsmm <- function(omega, dm,
 #'
 #' @param omega embedded transition probability matrix
 #'
-#' Either a matrix of dimension c(N,N) for homogeneous conditional transition probabilities (as computed by \code{\link{tpm_emb}}), or an array of dimension c(N,N,n) for inhomogeneous conditional transition probabilities (as computed by \code{\link{tpm_emb_g}}).
-#' @param dm state dwell-time distributions arranged in a list of length N
+#' Either a matrix of dimension \code{c(nStates, nStates)} for homogeneous conditional transition probabilities (as computed by \code{\link{tpm_emb}}), or an array of dimension \code{c(nStates, nStates, nObs)} for inhomogeneous conditional transition probabilities (as computed by \code{\link{tpm_emb_g}}).
+#' @param dm state dwell-time distributions arranged in a list of length \code{nStates}
 #'
 #' Each list element needs to be a matrix of dimension c(n, N_i), where each row t is the (approximate) probability mass function of state i at time t.
 #' @param eps rounding value: If an entry of the transition probabily matrix is smaller, than it is rounded to zero. Usually, this should not be changed.
@@ -1007,8 +1317,8 @@ tpm_ihsmm = function(omega, dm,
 #'
 #' @param omega embedded transition probability matrix
 #'
-#' Either a matrix of dimension c(N,N) for homogeneous conditional transition probabilities (as computed by \code{\link{tpm_emb}}), or an array of dimension c(N,N,L) for inhomogeneous conditional transition probabilities (as computed by \code{\link{tpm_emb_g}}).
-#' @param dm state dwell-time distributions arranged in a list of length N
+#' Either a matrix of dimension \code{c(nStates, nStates)} for homogeneous conditional transition probabilities (as computed by \code{\link{tpm_emb}}), or an array of dimension \code{c(nStates, nStates, L)} for inhomogeneous conditional transition probabilities (as computed by \code{\link{tpm_emb_g}}).
+#' @param dm state dwell-time distributions arranged in a list of length \code{nStates}
 #'
 #' Each list element needs to be a matrix of dimension c(L, N_i), where each row t is the (approximate) probability mass function of state i at time t.
 #' @param eps rounding value: If an entry of the transition probabily matrix is smaller, than it is rounded to zero. Usually, this should not be changed.

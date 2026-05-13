@@ -1,128 +1,48 @@
 
-# Regression setting ------------------------------------------------------
+###### Regression setting ------------------------------------------------------
 
-# hidden helper function 
-# -> just to turn cosinor(x, period) terms into sine/ cosine terms
-process_cosinor <- function(formula){
-  # Extract formula terms
-  Terms <- stats::terms(formula, specials = "cosinor")
-  term_names <- attr(Terms, "term.labels")
-  var_names <- all.vars(formula)
-  
-  # Identify cosinor terms
-  cosInd <- grep("cosinor\\(", term_names)
-  
-  # Separate regular terms
-  mainpart <- if(length(cosInd) > 0) term_names[-cosInd] else term_names
-  
-  # Expand cosinor terms while preserving interactions
-  expanded_terms <- c()
-  for(name in term_names[cosInd]){
-    # Extract the cosinor(...) call using regex
-    match <- regmatches(name, regexpr("cosinor\\(.*\\)", name))
-    
-    # Check if ", eval = TRUE" is present
-    if (grepl(", eval = TRUE", match)) {
-      # Replace ", eval = TRUE" with ", eval = FALSE"
-      new_match <- sub(", eval = TRUE", ", eval = FALSE", match)
-    } else if (!grepl(", eval = FALSE", match)) {
-      # If ", eval = FALSE" is not present, insert it
-      new_match <- sub("(cosinor\\(.*)(\\))", "\\1, eval = FALSE\\2", match)
-    } else {
-      # If ", eval = FALSE" is already present, keep it as is
-      new_match <- match
-    }
-    
-    # Evaluate the expression using the data environment
-    replace <- eval(parse(text = new_match), envir = list(cosinor = cosinor))
-    
-    # Preserve interactions (all are converted to ":" by terms())
-    if (grepl(":", name)) {
-      parts <- unlist(strsplit(name, ":"))  # Split interaction terms
-      other_factors <- parts[parts != match]  # Extract non-cosinor parts
-      
-      # Rebuild interactions with expanded terms
-      expanded_terms <- c(expanded_terms, sapply(replace, function(rt) paste(c(other_factors, rt), collapse = ":")))
-    } else {
-      expanded_terms <- c(expanded_terms, replace)
-    }
-  }
-  
-  # Final expanded formula
-  final_terms <- c(mainpart, expanded_terms)
-  
-  expanded_formula <- if (length(final_terms) == 0) {
-    ~1
-  } else {
-    stats::as.formula(paste("~", paste(final_terms, collapse = " + ")))
-  }
-  
-  # expanded_formula <- stats::as.formula(paste("~", paste(final_terms, collapse = " + ")))
-  
-  expanded_formula
-}
-
-#' Evaluate trigonometric basis expansion
-#' 
-#' This function can be used to evaluate a trigonometric basis expansion for a given periodic variable and period. 
-#' It can also be used in formulas passed to \code{\link{make_matrices}}.
-#' 
-#' The returned basis can be used for linear predictors of the form
-#' \deqn{ 
-#'  \eta^{(t)} = \beta_0 + \sum_{k} \bigl( \beta_{1k} \sin(\frac{2 \pi t}{\text{period}_k}) + \beta_{2k} \cos(\frac{2 \pi t}{\text{period}_k}) \bigr). 
-#' }
-#' This is relevant for modeling e.g. diurnal variation and the flexibility can be increased by adding smaller frequencies (i.e. increasing the length of \code{period}).
-#'  
-#' @param x vector of periodic variable values
-#' @param period vector of period length. For example for time of day \code{period = 24}, or \code{period = c(24,12)} for more flexibility.
-#' @param eval logical, should not be changed. If \code{TRUE} the function returns the evaluated cosinor terms, if \code{FALSE} the function returns the terms as strings which is used internally form formula evaluation.
+#' Trigonometric basis expansion
 #'
-#' @return either a desing matrix with the evaluated cosinor terms (\code{eval = TRUE}) or a character vector with the terms as strings (\code{eval = FALSE}).
+#' Builds a design matrix of \code{sin}/\code{cos} pairs for use in models
+#' with periodic predictors. Can be used directly or inside formulas passed
+#' to \code{make_matrices} (where expansion is handled automatically).
+#'
+#' The resulting columns form the basis for linear predictors of the form
+#' \deqn{
+#'   \eta_t = \beta_0 + \sum_k \Bigl(
+#'     \beta_{1k} \sin\!\Bigl(\tfrac{2 \pi x_t}{\text{period}_k}\Bigr) +
+#'     \beta_{2k} \cos\!\Bigl(\tfrac{2 \pi x_t}{\text{period}_k}\Bigr)
+#'   \Bigr).
+#' }
+#'
+#' @param x Numeric vector of the periodic variable.
+#' @param period Numeric vector of period lengths, e.g. \code{24} for a daily cycle with hourly data or \code{c(24, 12)} for a daily + semi-daily cycle.
+#'
+#' @return A numeric matrix with \code{2 * length(period)} columns named
+#'   \code{sin(2*pi*x/period)} / \code{cos(2*pi*x/period)}.
 #' @export
 #'
 #' @examples
-#' ## Evaluate cosinor terms
-#' # builds design matrix
-#' X = cosinor(1:24, period = 24)
-#' X = cosinor(1:24, period = c(24, 12, 6))
-#' 
-#' ## Usage in model formulas
-#' # e.g. frequencies of 24 and 12 hours + interaction with temperature
-#' form = ~ x + temp * cosinor(hour, c(24, 12)) 
-#' data = data.frame(x = runif(24), temp = rnorm(24,20), hour = 1:24)
-#' modmat = make_matrices(form, data = data)
-cosinor = function(x = 1:24, period = 24, eval = TRUE){
-  # get the name of input varible
-  xname = deparse(substitute(x))
-  
-  if(eval == FALSE){
-    out = c()
-    # Loop over periods and construct sine and cosine strings
-    for(p in period){
-      out = c(out,
-              paste0("sin(2*pi*", xname, "/", p, ")"),
-              paste0("cos(2*pi*", xname, "/", p, ")"))
-    }
-    return(out)
-  } else{
-    # Evaluate the cosinor terms
-    # x might be a vector
-    out = matrix(NA, nrow = length(x), ncol = 0)
-    names = c()
-    for(p in period){
-      out = cbind(out,
-                  sin(2*pi*x/p),
-                  cos(2*pi*x/p))
-      
-      names = c(names,
-                paste0("sin(2*pi*", xname, "/", p, ")"),
-                paste0("cos(2*pi*", xname, "/", p, ")"))
-    }
-    colnames(out) = names
-    return(out)
+#' cosinor(1:24, period = 24)
+#' cosinor(1:24, period = c(24, 12, 6))
+#'
+#' ## In model formulas (expand_cosinor handles the expansion):
+#' form <- ~ x + temp * cosinor(hour, c(24, 12))
+#' data <- data.frame(x = runif(24), temp = rnorm(24, 20), hour = 1:24)
+#' modmat <- make_matrices(form, data = data)
+cosinor <- function(x, period = 24) {
+  xname <- deparse(substitute(x))
+  out   <- matrix(NA_real_, nrow = length(x), ncol = 0)
+  nms   <- character(0)
+  for (p in period) {
+    out <- cbind(out, sin(2*pi*x/p), cos(2*pi*x/p))
+    nms <- c(nms,
+             sprintf("sin(2*pi*%s/%g)", xname, p),
+             sprintf("cos(2*pi*%s/%g)", xname, p))
   }
+  colnames(out) <- nms
+  out
 }
-
 
 #' Build the design and the penalty matrix for models involving penalised splines based on a formula and a data set
 #'
@@ -159,7 +79,7 @@ make_matrices_old = function(formula,
                          ){
   
   ## Potenially expand cosinor terms
-  formula = process_cosinor(formula)
+  formula = expand_cosinor(formula)
   
   ## setting up the model using mgcv
   gam_setup = gam(formula = update(formula, dummy ~ .),
@@ -230,7 +150,7 @@ make_matrices_flat <- function(formula, data, knots = NULL) {
   }
   
   process_single <- function(fml, name, knots_sub) {
-    fml <- process_cosinor(fml)
+    fml <- expand_cosinor(fml)
     
     # prepare gam model setup
     gam_setup <- gam(update(fml, dummy ~ .), data = cbind(dummy = 1, data), 
@@ -757,8 +677,7 @@ pred_matrix = function(model_matrices,
 
 
 
-# Density estimation setting ----------------------------------------------
-
+###### Density estimation setting ----------------------------------------------
 
 #' Build a standardised P-Spline design matrix and the associated P-Spline penalty matrix
 #' 
@@ -1012,7 +931,7 @@ make_matrices_dens = function(x, # data vector
   
   # constructing penalty matrix
   S <- crossprod(L[,-k], L[,-k]) # leaving out last column because parameter set to zero
-  cat("Leaving out last column of the penalty matrix, fix the last spline coefficient at zero for identifiability!\n")
+  message("Leaving out last column of the penalty matrix, fix the last spline coefficient at zero for identifiability!")
   
   basis <- list(
     type = type, 
@@ -1062,7 +981,7 @@ make_splinecoef = function(model_matrices,
 
   beta = beta - beta[,k]
   # beta = beta - beta[,k-1]
-  cat("Parameter matrix excludes the last column. Add a (fixed) zero column using 'cbind(coef, 0)' in your loss function!\n")
+  message("Parameter matrix excludes the last column. Add zero column using 'cbind(coef, 0)' in your loss function!\n")
   return(beta[,-k])
 }
 
@@ -1142,7 +1061,7 @@ smooth_dens_construct <- function(data,
   quantile <- FALSE # no quantile spacing if knots are not custom
   
   if(!is.data.frame(data)){
-    stop("datastreams must be a data frame")
+    stop("data must be a data frame")
   }
   
   nStreams <- ncol(data)
@@ -1193,7 +1112,8 @@ smooth_dens_construct <- function(data,
   for(i in seq_len(nStreams)){
     thisname = varnames[i]
     
-    cat(thisname, "\n")
+    msg <- paste0("Data stream: ", thisname)
+    message(msg)
     
     modmat <- make_matrices_dens(x = data[[thisname]], 
                                 type = type[i], 

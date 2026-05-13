@@ -1,6 +1,6 @@
 ---
-title: "State-space models"
-author: "Jan-Ole Koslik"
+title: "8 State-space models"
+author: "Jan-Ole Fischer"
 output: rmarkdown::html_vignette
 # output: pdf_document
 vignette: >
@@ -21,6 +21,10 @@ knitr::opts_chunk$set(
   out.width = "85%"
 )
 ```
+
+<div style="background-color:#fff3cd; border-left:5px solid #ffc107; padding:10px 15px; margin:15px 0;">
+This vignette has not yet been updated to work with RTMB
+</div>
 
 > Before diving into this vignette, we recommend reading the vignette [**Introduction to LaMa**](https://janolefi.github.io/LaMa/articles/Intro_to_LaMa.html).
 

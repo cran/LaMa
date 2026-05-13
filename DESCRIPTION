@@ -2,7 +2,7 @@ Package: LaMa
 Type: Package
 Title: Fast Numerical Maximum Likelihood Estimation for Latent Markov
         Models
-Version: 2.1.0
+Version: 2.1.1
 Authors@R: c(
     person(given = "Jan-Ole", family = "Fischer", 
           email = "jan-ole.fischer@mailbox.org",
@@ -20,18 +20,18 @@ URL: https://janolefi.github.io/LaMa/
 License: MIT + file LICENSE
 Encoding: UTF-8
 Imports: Rcpp, stats, utils, methods, Matrix, splines2, mgcv, MASS,
-        numDeriv, RTMBdist
+        numDeriv, RTMBdist (>= 1.0.4)
 LinkingTo: Rcpp, RcppArmadillo
-Depends: R (>= 3.5.0), RTMB (>= 1.7.0)
+Depends: R (>= 3.5.0), RTMB (>= 1.9.0)
 RoxygenNote: 7.3.3
 Suggests: knitr, rmarkdown, testthat (>= 3.0.0), PHSMM, MSwM, scales
 VignetteBuilder: knitr
 Config/testthat/edition: 3
 LazyData: true
 NeedsCompilation: yes
-Packaged: 2026-03-16 15:15:29 UTC; jan-ole
+Packaged: 2026-05-13 09:25:24 UTC; jan-ole
 Author: Jan-Ole Fischer [aut, cre] (ORCID:
     <https://orcid.org/0009-0004-1556-9053>)
 Maintainer: Jan-Ole Fischer <jan-ole.fischer@mailbox.org>
 Repository: CRAN
-Date/Publication: 2026-03-16 17:00:03 UTC
+Date/Publication: 2026-05-13 09:50:02 UTC

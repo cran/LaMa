@@ -10,10 +10,10 @@
 
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-<meta name="author" content="Jan-Ole Koslik" />
+<meta name="author" content="Jan-Ole Fischer" />
 
 
-<title>Longitudinal data</title>
+<title>4 Longitudinal data</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -338,11 +338,14 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 
 
-<h1 class="title toc-ignore">Longitudinal data</h1>
-<h4 class="author">Jan-Ole Koslik</h4>
+<h1 class="title toc-ignore">4 Longitudinal data</h1>
+<h4 class="author">Jan-Ole Fischer</h4>
 
 
 
+<div style="background-color:#fff3cd; border-left:5px solid #ffc107; padding:10px 15px; margin:15px 0;">
+<p>This vignette has not yet been updated to work with RTMB</p>
+</div>
 <blockquote>
 <p>Before diving into this vignette, we recommend reading the vignettes
 <a href="https://janolefi.github.io/LaMa/articles/Intro_to_LaMa.html"><strong>Introduction
@@ -459,14 +462,14 @@ individuals in <code>R</code>.</p>
 <span id="cb4-8"><a href="#cb4-8" tabindex="-1"></a>  mod <span class="ot">&lt;-</span> <span class="fu">nlm</span>(nll_pool, par, <span class="at">x =</span> x, <span class="at">trackID =</span> trackID)</span>
 <span id="cb4-9"><a href="#cb4-9" tabindex="-1"></a>)</span>
 <span id="cb4-10"><a href="#cb4-10" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb4-11"><a href="#cb4-11" tabindex="-1"></a><span class="co">#&gt;   0.296   0.020   0.323</span></span>
+<span id="cb4-11"><a href="#cb4-11" tabindex="-1"></a><span class="co">#&gt;   0.288   0.025   0.313</span></span>
 <span id="cb4-12"><a href="#cb4-12" tabindex="-1"></a></span>
 <span id="cb4-13"><a href="#cb4-13" tabindex="-1"></a><span class="co"># slow version</span></span>
 <span id="cb4-14"><a href="#cb4-14" tabindex="-1"></a><span class="fu">system.time</span>(</span>
 <span id="cb4-15"><a href="#cb4-15" tabindex="-1"></a>  mod <span class="ot">&lt;-</span> <span class="fu">nlm</span>(nll_pool_slow, par, <span class="at">x =</span> x, <span class="at">K =</span> K)</span>
 <span id="cb4-16"><a href="#cb4-16" tabindex="-1"></a>)</span>
 <span id="cb4-17"><a href="#cb4-17" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb4-18"><a href="#cb4-18" tabindex="-1"></a><span class="co">#&gt;   1.506   0.012   1.528</span></span></code></pre></div>
+<span id="cb4-18"><a href="#cb4-18" tabindex="-1"></a><span class="co">#&gt;   1.504   0.017   1.520</span></span></code></pre></div>
 <p>In this example, looping over individuals in <code>R</code> already
 leads to five times longer the estimation time, but this can be much
 more severe for more complicated models.</p>
@@ -550,7 +553,7 @@ for each track respectively.</p>
 <span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a>  mod_partial <span class="ot">&lt;-</span> <span class="fu">nlm</span>(nll_partial, par, <span class="at">x =</span> x, <span class="at">z =</span> z, <span class="at">trackID =</span> trackID)</span>
 <span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a>)</span>
 <span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a><span class="co">#&gt;   0.174   0.001   0.175</span></span></code></pre></div>
+<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a><span class="co">#&gt;   0.256   0.003   0.259</span></span></code></pre></div>
 </div>
 </div>
 

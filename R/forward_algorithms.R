@@ -1,30 +1,62 @@
 # HMMs, ct-HMMs and MMPPs -------------------------------------------------
 
-
-#' \href{https://www.taylorfrancis.com/books/mono/10.1201/b20790/hidden-markov-models-time-series-walter-zucchini-iain-macdonald-roland-langrock}{Forward algorithm} with homogeneous transition probability matrix
-#' 
-#' Calculates the log-likelihood of a sequence of observations under a homogeneous hidden Markov model using the \strong{forward algorithm}.
-#' 
+#' Forward algorithm to calculate the HMM log-likelihood
+#'
+#' Calculates the log-likelihood of a sequence of observations under a hidden Markov model
+#' using the \strong{forward algorithm} (Zucchini, MacDonald & Langrock, 2016).
+#'
+#' @references Zucchini, W., MacDonald, I.L., & Langrock, R. (2016). \emph{Hidden Markov Models for
+#'   Time Series: An Introduction Using R} (2nd ed.). Chapman & Hall/CRC.
+#'
 #' @family forward algorithms
 #'
-#' @param delta initial or stationary distribution of length \code{N}, or matrix of dimension \code{c(k,N)} for \code{k} independent tracks, if \code{trackID} is provided
-#' @param Gamma transition probability matrix of dimension \code{c(N,N)}, or array of \code{k} transition probability matrices of dimension \code{c(N,N,k)}, if \code{trackID} is provided
-#' @param allprobs matrix of state-dependent probabilities/ density values of dimension \code{c(n, N)}
-#' @param trackID optional vector of length \code{n} containing IDs that separate tracks.
+#' @param delta 
+#' initial distribution; either
+#'   \itemize{
+#'     \item a vector of length \code{nStates}, or
+#'     \item a matrix of dimension \code{c(nTracks, nStates)}, if \code{trackID} is provided.
+#'   }
+#'   
+#' @param Gamma 
+#' transition probability matrix; either
+#'   \itemize{
+#'     \item a matrix of dimension \code{c(nStates, nStates)}, or
+#'     \item an array of dimension \code{c(nStates, nStates, nTracks)} if \code{trackID} is provided, or
+#'     \item an array of dimension \code{c(nStates, nStates, nObs)} for time-varying transition probabilities, in which case \code{\link{forward_g}} is called internally.
+#'   }
+#'   
+#' @param allprobs 
+#' matrix of state-dependent probabilities or density values of dimension \code{c(nObs, nStates)}
 #' 
-#' If provided, the total log-likelihood will be the sum of each track's likelihood contribution.
-#' In this case, \code{Gamma} can be a matrix, leading to the same transition probabilities for each track, or an array of dimension \code{c(N,N,k)}, with one (homogeneous) transition probability matrix for each track.
-#' Furthermore, instead of a single vector \code{delta} corresponding to the initial distribution, a \code{delta} matrix of initial distributions, of dimension \code{c(k,N)}, can be provided, such that each track starts with it's own initial distribution.
-#' @param logspace logical, indicating whether the probabilities/ densities in the \code{allprobs} matrix are on log-scale. 
-#' If so, internal computations are also done on log-scale which is numerically more robust when the entries are very small.
-#' Note that this is only supported when used in AD mode with \code{RTMB}.
-#' @param bw optional integer, indicating the bandwidth for a banded approximation of the forward algorithm. This is for expert users only, if sparsity in the Hessian matrix w.r.t. observations is required.
-#' @param report logical, indicating whether \code{delta}, \code{Gamma}, \code{allprobs}, and potentially \code{trackID} should be reported from the fitted model. 
-#' Defaults to \code{TRUE}, but only works if \code{ad = TRUE}, as it uses the \code{RTMB} package. 
+#' @param trackID 
+#' optional vector of length \code{nObs} containing \code{nTracks} unique IDs that separate tracks (see \sQuote{Details}).
 #' 
-#' When there are multiple tracks, for compatibility with downstream functions like \code{\link{viterbi}}, \code{\link{stateprobs}} or \code{\link{pseudo_res}}, 
+#' @param logspace 
+#' logical; if \code{TRUE}, \code{allprobs} is assumed to be on the log-scale, improving numerical stability for small probabilities. Only supported with \code{RTMB}.
+#' 
+#' @param bw 
+#' optional positive integer specifying the bandwidth for a banded approximation of the forward algorithm, inducing a banded Hessian w.r.t. the observations. 
+#' Defaults to \code{NULL} (exact algorithm). Approximation error decays geometrically in \code{bw}.
+#' 
+#' @param report 
+#' logical; if \code{TRUE} (default), \code{delta}, \code{Gamma}, \code{allprobs}, and \code{trackID} are reported from the fitted model. Requires \code{ad = TRUE}.
+#' 
+#' @param ad 
+#' logical; whether to use automatic differentiation. Determined automatically — for debugging only.
+#'   
+#' @details
+#' If \code{trackID} is provided, the total log-likelihood is the sum of each track's likelihood
+#' contribution. In this case, \code{Gamma} can be
+#'   \itemize{
+#'     \item a matrix (same transition probabilities for each track),
+#'     \item an array of dimension \code{c(nStates, nStates, nTracks)} (track-specific transition probability matrix), or
+#'     \item an array of dimension \code{c(nStates, nStates, nObs)} for time-varying transition probabilities, in which case \code{\link{forward_g}} is called internally.
+#'   }
+#' Additionally, \code{delta} can be a vector (same initial distribution for each track) or a
+#' matrix of dimension \code{c(nTracks, nStates)} (track-specific initial distributions).
+#' 
+#' \strong{Note:} When there are multiple tracks, for compatibility with downstream functions like \code{\link{viterbi}}, \code{\link{stateprobs}} or \code{\link{pseudo_res}}, 
 #' \code{forward} should only be called \strong{once} with a \code{trackID} argument.
-#' @param ad optional logical, indicating whether automatic differentiation should be used. Determined automatically and intended only for debugging purposes.
 #'
 #' @return HMM log-likelihood for given data and parameters
 #' @export
@@ -67,6 +99,12 @@ forward <- function(delta,
   } 
   nObs <- nrow(allprobs)
   nStates <- ncol(allprobs)
+  
+  # Handle time-varying Gamma by dispatching to forward_g
+  if (is.array(Gamma) && length(dim(Gamma)) == 3 && (dim(Gamma)[3] == nObs | dim(Gamma)[3] == nObs-1)) {
+    return(forward_g(delta, Gamma, allprobs, trackID = trackID,
+                     logspace = logspace, bw = bw, report = report, ad = ad))
+  }
   
   # exit if only one state
   if (nStates == 1) return(sum(log(allprobs)))
@@ -194,12 +232,12 @@ forward <- function(delta,
     # printing suggestion to change TapeConfig
     cfg <- RTMB::TapeConfig()
     if(cfg$matmul != "plain" & nStates <= 5) {
-      cat("Performance tip: Consider running `TapeConfig(matmul = 'plain')` before `MakeADFun()` to speed up the forward algorithm.\n")
+      message("Performance tip: Consider running TapeConfig(matmul = 'plain') before MakeADFun() to speed up the forward algorithm.\n")
     }
     if(cfg$matmul == "plain" & nStates > 50) {
       msg <- paste0("Your model has a lot of states (", nStates, "). ",
-                    "Run `TapeConfig(matmul = 'atomic')` or `TapeConfig(matmul = 'compact')` before `MakeADFun()` to speed up the forward algorithm.\n")
-    cat(msg)
+                    "Run TapeConfig(matmul = 'atomic') or TapeConfig(matmul = 'compact') before MakeADFun() to speed up the forward algorithm.\n")
+      message(msg)
     }
     
     # AD overloading to avoid trouble 
@@ -371,42 +409,58 @@ forward <- function(delta,
 }
 
 
-#' General \href{https://www.taylorfrancis.com/books/mono/10.1201/b20790/hidden-markov-models-time-series-walter-zucchini-iain-macdonald-roland-langrock}{forward algorithm} with time-varying transition probability matrix
+#' Forward algorithm with time-varying transition probability matrix
 #'
-#' Calculates the log-likelihood of a sequence of observations under a hidden Markov model with time-varying transition probabilities using the \strong{forward algorithm}.
-#' 
+#' Calculates the log-likelihood of a sequence of observations under a hidden Markov model with time-varying transition probabilities using the \strong{forward algorithm} (Zucchini, MacDonald & Langrock, 2016).
+#'
+#' @references Zucchini, W., MacDonald, I.L., & Langrock, R. (2016). \emph{Hidden Markov Models for
+#'   Time Series: An Introduction Using R} (2nd ed.). Chapman & Hall/CRC.
+#'
 #' @family forward algorithms
+#' 
+#' @param delta 
+#' initial distribution; either
+#'   \itemize{
+#'     \item a vector of length \code{nStates}, or
+#'     \item a matrix of dimension \code{c(nTracks, nStates)}, if \code{trackID} is provided. 
+#'   }
+#'   
+#' @param Gamma
+#' array of transition probability matrices of dimension \code{c(nStates, nStates, nObs)}, where
+#' the first slice of each track is ignored as there is no transition into the start of a track.
+#' 
+#' For a single track, an array of dimension \code{c(nStates, nStates, nObs-1)} is also accepted.
 #'
-#' @param delta initial or stationary distribution of length \code{N}, or matrix of dimension \code{c(k,N)} for \code{k} independent tracks, if \code{trackID} is provided
-#' @param Gamma array of transition probability matrices of dimension \code{c(N,N,n-1)}, as in a time series of length \code{n}, there are only \code{n-1} transitions. 
+#' This function also supports continuous-time HMMs, where each slice is a Markov semigroup
+#' \eqn{\Gamma(\Delta t) = \exp(Q \Delta t)} for generator \eqn{Q}.
 #' 
-#' If an array of dimension \code{c(N,N,n)} for a single track is provided, the first slice will be ignored.
-#'  
-#' If the elements of \eqn{\Gamma^{(t)}} depend on covariate values at t or covariates \eqn{t+1} is your choice in the calculation of the array, prior to using this function.
-#' When conducting the calculation by using \code{tpm_g()}, the choice comes down to including the covariate matrix \code{Z[-1,]} oder \code{Z[-n,]}.
+#' @param allprobs 
+#' matrix of state-dependent probabilities or density values of dimension \code{c(nObs, nStates)}
 #' 
-#' If \code{trackID} is provided, Gamma needs to be an array of dimension \code{c(N,N,n)}, matching the number of rows of allprobs. For each track, the transition matrix at the beginning will be ignored.
-#' If the parameters for Gamma are pooled across tracks or not, depends on your calculation of Gamma. If pooled, you can use \code{tpm_g(Z, beta)} to calculate the entire array of transition matrices when \code{Z} is of dimension \code{c(n,p)}. \cr
+#' @param trackID 
+#' optional vector of length \code{nObs} containing \code{nTracks} unique IDs that separate tracks (see \sQuote{Details}).
 #' 
-#' This function can also be used to fit continuous-time HMMs, where each array entry is the Markov semigroup \eqn{\Gamma(\Delta t) = \exp(Q \Delta t)} and \eqn{Q} is the generator of the continuous-time Markov chain.
+#' @param logspace 
+#' logical; if \code{TRUE}, \code{allprobs} is assumed to be on the log-scale, improving numerical stability for small probabilities. Only supported with \code{RTMB}.
 #' 
-#' @param allprobs matrix of state-dependent probabilities/ density values of dimension \code{c(n, N)}
-#' @param trackID optional vector of length \code{n}  containing IDs that separate tracks.
+#' @param bw 
+#' optional positive integer specifying the bandwidth for a banded approximation of the forward algorithm, inducing a banded Hessian w.r.t. the observations. 
+#' Defaults to \code{NULL} (exact algorithm). Approximation error decays geometrically in \code{bw}.
 #' 
-#' If provided, the total log-likelihood will be the sum of each track's likelihood contribution.
-#' In this case, \code{Gamma} must be an array of dimension \code{c(N,N,n)}, matching the number of rows of allprobs. For each track, the transition matrix at the beginning of the track will be ignored (as there is no transition between tracks).
-#' Furthermore, instead of a single vector \code{delta} corresponding to the initial distribution, a \code{delta} matrix of initial distributions, of dimension \code{c(k,N)}, can be provided, such that each track starts with it's own initial distribution.
-#' @param logspace logical, indicating whether the probabilities/ densities in the \code{allprobs} matrix are on log-scale. 
-#' If so, internal computations are also done on log-scale which is numerically more robust when the entries are very small.
-#' Note that this is only supported when used in AD mode with \code{RTMB}.
-#' @param bw optional integer, indicating the bandwidth for a banded approximation of the forward algorithm. This is for expert users only, if sparsity in the Hessian matrix w.r.t. observations is required.
-#' @param report logical, indicating whether \code{delta}, \code{Gamma}, \code{allprobs}, and potentially \code{trackID} should be reported from the fitted model. 
-#' Defaults to \code{TRUE}, but only works if \code{ad = TRUE}, as it uses the \code{RTMB} package. 
+#' @param report 
+#' logical; if \code{TRUE} (default), \code{delta}, \code{Gamma}, \code{allprobs}, and \code{trackID} are reported from the fitted model. Requires \code{ad = TRUE}.
 #' 
-#' When there are multiple tracks, for compatibility with downstream functions like \code{\link{viterbi_g}}, \code{\link{stateprobs_g}} or \code{\link{pseudo_res}}, 
+#' @param ad 
+#' logical; whether to use automatic differentiation. Determined automatically — for debugging only.
+#' 
+#' @details
+#' If \code{trackID} is provided, the total log-likelihood will be the sum of each track's likelihood contribution.
+#' In this case, \code{Gamma} must be an array of dimension \code{c(nStates, nStates, nObs)}, matching the number of rows of allprobs. For each track, the transition matrix at the beginning of the track will be ignored (as there is no transition between tracks).
+#' Additionally, \code{delta} can be a vector (same initial distribution for each track) or a matrix of dimension \code{c(nTracks, nStates)} (different initial distribution for each track).
+#' 
+#' \strong{Note:} When there are multiple tracks, for compatibility with downstream functions like \code{\link{viterbi_g}}, \code{\link{stateprobs_g}} or \code{\link{pseudo_res}}, 
 #' \code{forward_g} should only be called \strong{once} with a \code{trackID} argument.
-#' @param ad optional logical, indicating whether automatic differentiation should be used. Determined automatically and intended only for debugging purposes.
-#' 
+#'
 #' @return HMM log-likelihood for given data and parameters
 #' @export
 #' @import RTMB
@@ -596,12 +650,12 @@ forward_g <- function(delta,
     # printing suggestion to change TapeConfig
     cfg <- RTMB::TapeConfig()
     if(cfg$matmul != "plain" & nStates <= 5) {
-      cat("Performance tip: Consider running `TapeConfig(matmul = 'plain')` before `MakeADFun()` to speed up the forward algorithm.\n")
+      message("Performance tip: Consider running TapeConfig(matmul = 'plain') before MakeADFun() to speed up the forward algorithm.\n")
     }
     if(cfg$matmul == "plain" & nStates > 50) {
       msg <- paste0("Your model has a lot of states (", nStates, "). ",
-                    "Run `TapeConfig(matmul = 'atomic')` or `TapeConfig(matmul = 'compact')` before `MakeADFun()` to speed up the forward algorithm.\n")
-      cat(msg)
+                    "Run TapeConfig(matmul = 'atomic') or TapeConfig(matmul = 'compact') before MakeADFun() to speed up the forward algorithm.\n")
+      message(msg)
     }
     
     # AD overloading to avoid trouble 
@@ -817,18 +871,18 @@ stateDist_banded <- function(delta, Gamma, bw){
 #' Thus, it is much more efficient to only calculate these \eqn{L} matrices and index them by a time variable (e.g. time of day or day of year) instead of calculating such a matrix for each index in the data set (which would be redundant).
 #' This function allows for that by only expecting a transition probability matrix for each time point in a period and an integer valued (\eqn{1, \dots, L}) time variable that maps the data index to the according time.
 #'
-#' @param delta initial or stationary distribution of length N, or matrix of dimension c(k,N) for k independent tracks, if \code{trackID} is provided
-#' @param Gamma array of transition probability matrices of dimension c(N,N,L).
+#' @param delta initial or stationary distribution of length \code{nStates}, or matrix of dimension \code{c(nTracks, nStates)} for \code{nTracks} independent tracks, if \code{trackID} is provided
+#' @param Gamma array of transition probability matrices of dimension \code{c(nStates, nStates, L)}.
 #' 
 #' Here we use the definition \eqn{\Pr(S_t=j \mid S_{t-1}=i) = \gamma_{ij}^{(t)}} such that the transition probabilities between time point \eqn{t-1} and \eqn{t} are an element of \eqn{\Gamma^{(t)}}.
-#' @param allprobs matrix of state-dependent probabilities/ density values of dimension c(n, N)
-#' @param tod (Integer valued) variable for cycle indexing in 1, ..., L, mapping the data index to a generalised time of day (length n)
+#' @param allprobs matrix of state-dependent probabilities/ density values of dimension \code{c(nObs, nStates)}
+#' @param tod (Integer valued) variable for cycle indexing in 1, ..., L, mapping the data index to a generalised time of day (length \code{nObs})
 #' 
 #' For half-hourly data L = 48. It could, however, also be day of year for daily data and L = 365.
-#' @param trackID optional vector of length n containing IDs
+#' @param trackID optional vector of length \code{nObs} containing IDs
 #' 
 #' If provided, the total log-likelihood will be the sum of each track's likelihood contribution.
-#' Instead of a single vector \code{delta} corresponding to the initial distribution, a \code{delta} matrix of initial distributions of dimension c(k,N), can be provided, such that each track starts with it's own initial distribution.
+#' Instead of a single vector \code{delta} corresponding to the initial distribution, a \code{delta} matrix of initial distributions of dimension \code{c(nTracks, nObs)}, can be provided, such that each track starts with it's own initial distribution.
 #' @param ad optional logical, indicating whether automatic differentiation with \code{RTMB} should be used. By default, the function determines this itself.
 #' @param report logical, indicating whether \code{delta}, \code{Gamma}, \code{allprobs}, and potentially \code{trackID} should be reported from the fitted model. 
 #' Defaults to \code{TRUE}, but only works if \code{ad = TRUE}, as it uses the \code{RTMB} package. 
@@ -920,17 +974,17 @@ forward_p <- function(delta,
 #'
 #' Koslik, J. O. (2025). Hidden semi-Markov models with inhomogeneous state dwell-time distributions. Computational Statistics & Data Analysis, 209, 108171.
 #'
-#' @param dm list of length N containing vectors of dwell-time probability mass functions (PMFs) for each state. The vector lengths correspond to the approximating state aggregate sizes, hence there should be little probablity mass not covered by these.
-#' @param omega matrix of dimension c(N,N) of conditional transition probabilites, also called embedded transition probability matrix. 
+#' @param dm list of length \code{nStates} containing vectors of dwell-time probability mass functions (PMFs) for each state. The vector lengths correspond to the approximating state aggregate sizes, hence there should be little probablity mass not covered by these.
+#' @param omega matrix of dimension \code{c(nStates, nStates)} of conditional transition probabilites, also called embedded transition probability matrix. 
 #' 
 #' Contains the transition probabilities given that the current state is left. Hence, the diagonal elements need to be zero and the rows need to sum to one. Can be constructed using \code{\link{tpm_emb}}.
-#' @param allprobs matrix of state-dependent probabilities/ density values of dimension c(n, N) which will automatically be converted to the appropriate dimension.
-#' @param trackID optional vector of length n containing IDs
+#' @param allprobs matrix of state-dependent probabilities/ density values of dimension \code{c(nObs, nStates)} which will automatically be converted to the appropriate dimension.
+#' @param trackID optional vector of length \code{nObs} containing IDs
 #' 
 #' If provided, the total log-likelihood will be the sum of each track's likelihood contribution.
-#' In this case, \code{dm} can be a nested list, where the top layer contains k \code{dm} lists as described above. \code{omega} can then also be an array of dimension c(N,N,k) with one conditional transition probability matrix for each track.
-#' Furthermore, instead of a single vector \code{delta} corresponding to the initial distribution, a \code{delta} matrix of initial distributions, of dimension c(k,N), can be provided, such that each track starts with it's own initial distribution.
-#' @param delta optional vector of initial state probabilities of length N
+#' In this case, \code{dm} can be a nested list, where the top layer contains k \code{dm} lists as described above. \code{omega} can then also be an array of dimension \code{c(nStates, nStates, nTracks)} with one conditional transition probability matrix for each track.
+#' Furthermore, instead of a single vector \code{delta} corresponding to the initial distribution, a \code{delta} matrix of initial distributions, of dimension \code{c(nTracks, nStates)}, can be provided, such that each track starts with it's own initial distribution.
+#' @param delta optional vector of initial state probabilities of length \code{nStates}
 #' 
 #' By default, the stationary distribution is computed (which is typically recommended).
 #' @param eps small value to avoid numerical issues in the approximating transition matrix construction. Usually, this should not be changed.
@@ -1165,21 +1219,21 @@ forward_hsmm <- function(dm, omega, allprobs,
 #'
 #' @references Koslik, J. O. (2025). Hidden semi-Markov models with inhomogeneous state dwell-time distributions. Computational Statistics & Data Analysis, 209, 108171.
 #'
-#' @param dm list of length N containing matrices (or vectors) of dwell-time probability mass functions (PMFs) for each state.
+#' @param dm list of length \code{nStates} containing matrices (or vectors) of dwell-time probability mass functions (PMFs) for each state.
 #' 
 #' If the dwell-time PMFs are constant, the vectors are the PMF of the dwell-time distribution fixed in time. The vector lengths correspond to the approximating state aggregate sizes, hence there should be little probablity mass not covered by these.
 #' 
 #' If the dwell-time PMFs are inhomogeneous, the matrices need to have n rows, where n is the number of observations. The number of columns again correponds to the size of the approximating state aggregates.
 #' 
 #' In the latter case, the first \code{max(sapply(dm, ncol)) - 1} observations will not be used because the first approximating transition probability matrix needs to be computed based on the first \code{max(sapply(dm, ncol))} covariate values (represented by \code{dm}).
-#' @param omega matrix of dimension c(N,N) or array of dimension c(N,N,n) of conditional transition probabilites, also called embedded transition probability matrix.
+#' @param omega matrix of dimension \code{c(nStates, nStates)} or array of dimension \code{c(nStates, nStates, nObs)} of conditional transition probabilites, also called embedded transition probability matrix.
 #' 
 #' It contains the transition probabilities given the current state is left. Hence, the diagonal elements need to be zero and the rows need to sum to one. Such a matrix can be constructed using \code{\link{tpm_emb}} and an array using \code{\link{tpm_emb_g}}.
-#' @param allprobs matrix of state-dependent probabilities/ density values of dimension c(n, N)
-#' @param trackID trackID optional vector of length n containing IDs
+#' @param allprobs matrix of state-dependent probabilities/ density values of dimension \code{c(nObs, nStates)}
+#' @param trackID trackID optional vector of length \code{nObs} containing IDs
 #' 
 #' If provided, the total log-likelihood will be the sum of each track's likelihood contribution.
-#' Instead of a single vector \code{delta} corresponding to the initial distribution, a \code{delta} matrix of initial distributions, of dimension c(k,N), can be provided, such that each track starts with it's own initial distribution.
+#' Instead of a single vector \code{delta} corresponding to the initial distribution, a \code{delta} matrix of initial distributions, of dimension \code{c(nTracks, nStates)}, can be provided, such that each track starts with it's own initial distribution.
 #' @param delta optional vector of initial state probabilities of length N
 #' 
 #' By default, instead of this, the stationary distribution is computed corresponding to the first approximating transition probability matrix of each track is computed. Contrary to the homogeneous case, this is not theoretically motivated but just for convenience.
@@ -1530,22 +1584,22 @@ forward_ihsmm <- function(dm, omega, allprobs,
 #'
 #' @references Koslik, J. O. (2025). Hidden semi-Markov models with inhomogeneous state dwell-time distributions. Computational Statistics & Data Analysis, 209, 108171.
 #'
-#' @param dm list of length N containing matrices (or vectors) of dwell-time probability mass functions (PMFs) for each state.
+#' @param dm list of length \code{nStates} containing matrices (or vectors) of dwell-time probability mass functions (PMFs) for each state.
 #'
 #' If the dwell-time PMFs are constant, the vectors are the PMF of the dwell-time distribution fixed in time. The vector lengths correspond to the approximating state aggregate sizes, hence there should be little probablity mass not covered by these.
 #' 
 #' If the dwell-time PMFs are inhomogeneous, the matrices need to have L rows, where L is the cycle length. The number of columns again correpond to the size of the approximating state aggregates.
-#' @param omega matrix of dimension c(N,N) or array of dimension c(N,N,L) of conditional transition probabilites, also called embedded transition probability matrix
+#' @param omega matrix of dimension \code{c(nStates, nStates)} or array of dimension \code{c(nStates, nStates, L)} of conditional transition probabilites, also called embedded transition probability matrix
 #' 
 #' It contains the transition probabilities given the current state is left. Hence, the diagonal elements need to be zero and the rows need to sum to one. Such a matrix can be constructed using \code{\link{tpm_emb}} and an array using \code{\link{tpm_emb_g}}.
-#' @param allprobs matrix of state-dependent probabilities/ density values of dimension c(n, N)
-#' @param tod (Integer valued) variable for cycle indexing in 1, ..., L, mapping the data index to a generalised time of day (length n).
+#' @param allprobs matrix of state-dependent probabilities/ density values of dimension \code{c(nObs, nStates)}
+#' @param tod (Integer valued) variable for cycle indexing in 1, ..., L, mapping the data index to a generalised time of day (length \code{nObs}).
 #' For half-hourly data L = 48. It could, however, also be day of year for daily data and L = 365.
-#' @param trackID optional vector of length n containing IDs
+#' @param trackID optional vector of length \code{nObs} containing IDs
 #' 
 #' If provided, the total log-likelihood will be the sum of each track's likelihood contribution.
-#' Instead of a single vector \code{delta} corresponding to the initial distribution, a \code{delta} matrix of initial distributions, of dimension c(k,N), can be provided, such that each track starts with it's own initial distribution.
-#' @param delta Optional vector of initial state probabilities of length N. By default, instead of this, the stationary distribution is computed corresponding to the first approximating t.p.m. of each track is computed. Contrary to the homogeneous case, this is not theoretically motivated but just for convenience.
+#' Instead of a single vector \code{delta} corresponding to the initial distribution, a \code{delta} matrix of initial distributions, of dimension \code{c(nTracks, nStates)}, can be provided, such that each track starts with it's own initial distribution.
+#' @param delta Optional vector of initial state probabilities of length \code{nStates}. By default, instead of this, the stationary distribution is computed corresponding to the first approximating t.p.m. of each track is computed. Contrary to the homogeneous case, this is not theoretically motivated but just for convenience.
 #' @param eps small value to avoid numerical issues in the approximating transition matrix construction. Usually, this should not be changed.
 #' @param report logical, indicating whether initial distribution, approximating transition probability matrix and \code{allprobs} matrix should be reported from the fitted model. Defaults to \code{TRUE}.
 #'

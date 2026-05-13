@@ -1,6 +1,6 @@
 ---
-title: "Longitudinal data"
-author: "Jan-Ole Koslik"
+title: "4 Longitudinal data"
+author: "Jan-Ole Fischer"
 output: rmarkdown::html_vignette
 # output: pdf_document
 vignette: >
@@ -23,6 +23,10 @@ knitr::opts_chunk$set(
 
 options(rmarkdown.html_vignette.check_title = FALSE)
 ```
+
+<div style="background-color:#fff3cd; border-left:5px solid #ffc107; padding:10px 15px; margin:15px 0;">
+This vignette has not yet been updated to work with RTMB
+</div>
 
 > Before diving into this vignette, we recommend reading the vignettes [**Introduction to LaMa**](https://janolefi.github.io/LaMa/articles/Intro_to_LaMa.html) and [**Inhomogeneous HMMs**](https://janolefi.github.io/LaMa/articles/Inhomogeneous_HMMs.html).
 
