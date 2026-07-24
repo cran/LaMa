@@ -343,217 +343,367 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 
 
-<div style="background-color:#fff3cd; border-left:5px solid #ffc107; padding:10px 15px; margin:15px 0;">
-<p>This vignette has not yet been updated to work with RTMB</p>
-</div>
 <blockquote>
 <p>Before diving into this vignette, we recommend reading the vignettes
 <a href="https://janolefi.github.io/LaMa/articles/Intro_to_LaMa.html"><strong>Introduction
-to LaMa</strong></a> and <a href="https://janolefi.github.io/LaMa/articles/Inhomogeneous_HMMs.html"><strong>Inhomogeneous
-HMMs</strong></a>.</p>
+to LaMa</strong></a> and <a href="https://janolefi.github.io/LaMa/articles/LaMa_and_RTMB.html"><strong>Automatic
+differentiation via RTMB</strong></a>.</p>
 </blockquote>
-<p>In real-data applications, one will often be faced by a data set
-consisting of several measurement tracks, that can reasonably be assumed
-to be mutually independent. Examples for such a longitudinal structure
-include GPS tracks of several individuals (or several tracks (e.g. days)
-of one individual), or when analysing sports data, one will often be
-faced by time series for separate games. In such settings, the
-researcher of course has to decide whether to pool parameters across
-tracks or not. Here, we will provide brief examples for complete and
-partial pooling.</p>
-<p>In the situations above, the likelihood function will look slightly
-different. In case of <span class="math inline">\(K\)</span> independent
-tracks, we have <span class="math display">\[
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(LaMa)</span></code></pre></div>
+<p>In real-data applications, one will often be faced with a data set
+consisting of several measurement tracks that can reasonably be assumed
+to be mutually independent. Examples of such a longitudinal structure
+include GPS tracks of several individuals (or several tracks, e.g. days,
+of one individual), or when analysing sports data, time series for
+separate games. In such settings, the researcher must decide whether to
+pool parameters across tracks or not. Here, we provide brief examples
+for complete and partial pooling.</p>
+<p>When the data consists of <span class="math inline">\(K\)</span>
+independent tracks, the joint likelihood is <span class="math display">\[
 L(\theta) = \prod_{k=1}^K L_k(\theta),
 \]</span> where <span class="math inline">\(L_k(\theta)\)</span> is the
 usual HMM likelihood for the <span class="math inline">\(k\)</span>-th
-track. Thus the log-likelihood becomes a sum over <span class="math inline">\(K\)</span> tracks, which we can calculate in a
-loop. When <span class="math inline">\(K\)</span> is even moderately
-large, performing this loop in <code>R</code> already leads to severe
-slowdowns in likelihood evaluation times. Thus, the forward algorithms
-in <code>LaMa</code> allow for the likelihood formulation above, when
-the indices at which separate tracks begin are specified. Here, we
-shortly demonstrate how to use this option.</p>
+track, so the log-likelihood is a sum over <span class="math inline">\(K\)</span> tracks. In <code>LaMa</code>, this is
+handled efficiently by passing a <code>trackID</code> vector to
+<code>forward()</code>, which specifies the track index of each
+observation. The forward algorithm then resets to the initial
+distribution at the start of each new track and sums up the individual
+log-likelihood contributions automatically. Importantly, always using
+the <code>trackID</code> argument rather than calling
+<code>forward()</code> separately for each track ensures that the
+automatic reporting mechanism inside <code>forward()</code> — on which
+<code>viterbi()</code>, <code>stateprobs()</code>, and other downstream
+functions rely — works correctly.</p>
 <div id="complete-pooling" class="section level2">
 <h2>Complete pooling</h2>
+<p>With complete pooling, all parameters are shared across
+individuals.</p>
 <div id="generating-data" class="section level3">
 <h3>Generating data</h3>
-<p>We generate <span class="math inline">\(K\)</span> separate tracks,
-all from the exact same model:</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="co"># loading the package</span></span>
-<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="fu">library</span>(LaMa)</span></code></pre></div>
-<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="co"># parameters are shared across individuals</span></span>
-<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a>mu <span class="ot">=</span> <span class="fu">c</span>(<span class="dv">15</span>, <span class="dv">60</span>) <span class="co"># state-dependent means</span></span>
+<p>We generate <span class="math inline">\(K\)</span> separate tracks
+from the same model:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="co"># parameters shared across individuals</span></span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a>mu <span class="ot">=</span> <span class="fu">c</span>(<span class="dv">15</span>, <span class="dv">60</span>)    <span class="co"># state-dependent means</span></span>
 <span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a>sigma <span class="ot">=</span> <span class="fu">c</span>(<span class="dv">10</span>, <span class="dv">40</span>) <span class="co"># state-dependent standard deviations</span></span>
-<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a>Gamma <span class="ot">=</span> <span class="fu">matrix</span>(<span class="fu">c</span>(<span class="fl">0.95</span>, <span class="fl">0.05</span>, <span class="fl">0.15</span>, <span class="fl">0.85</span>), <span class="at">nrow =</span> <span class="dv">2</span>, <span class="at">byrow =</span> <span class="cn">TRUE</span>) <span class="co"># t.p.m.</span></span>
-<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a>delta <span class="ot">=</span> <span class="fu">stationary</span>(Gamma) <span class="co"># stationary distribution</span></span>
-<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a></span>
-<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a><span class="co"># simulation of all tracks</span></span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a>Gamma <span class="ot">=</span> <span class="fu">matrix</span>(<span class="fu">c</span>(<span class="fl">0.95</span>, <span class="fl">0.05</span>,</span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a>                 <span class="fl">0.15</span>, <span class="fl">0.85</span>), <span class="at">nrow =</span> <span class="dv">2</span>, <span class="at">byrow =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a>delta <span class="ot">=</span> <span class="fu">stationary</span>(Gamma)</span>
+<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a></span>
 <span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">123</span>)</span>
-<span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a>K <span class="ot">=</span> <span class="dv">200</span> <span class="co"># number of individuals, for example different animals</span></span>
-<span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a>n <span class="ot">=</span> <span class="dv">50</span> <span class="co"># observations per animal only (but many animals)</span></span>
-<span id="cb2-11"><a href="#cb2-11" tabindex="-1"></a></span>
-<span id="cb2-12"><a href="#cb2-12" tabindex="-1"></a>s <span class="ot">=</span> x <span class="ot">=</span> <span class="fu">rep</span>(<span class="cn">NA</span>, n<span class="sc">*</span>K)</span>
-<span id="cb2-13"><a href="#cb2-13" tabindex="-1"></a><span class="cf">for</span>(k <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span>K){</span>
-<span id="cb2-14"><a href="#cb2-14" tabindex="-1"></a>  sk <span class="ot">=</span> xk <span class="ot">=</span> <span class="fu">rep</span>(<span class="cn">NA</span>, n)</span>
-<span id="cb2-15"><a href="#cb2-15" tabindex="-1"></a>  sk[<span class="dv">1</span>] <span class="ot">=</span> <span class="fu">sample</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>, <span class="dv">1</span>, <span class="at">prob =</span> delta)</span>
-<span id="cb2-16"><a href="#cb2-16" tabindex="-1"></a>  xk[<span class="dv">1</span>] <span class="ot">=</span> <span class="fu">rnorm</span>(<span class="dv">1</span>, mu[sk[<span class="dv">1</span>]], sigma[sk[<span class="dv">1</span>]])</span>
-<span id="cb2-17"><a href="#cb2-17" tabindex="-1"></a>  <span class="cf">for</span>(t <span class="cf">in</span> <span class="dv">2</span><span class="sc">:</span>n){</span>
-<span id="cb2-18"><a href="#cb2-18" tabindex="-1"></a>    sk[t] <span class="ot">=</span> <span class="fu">sample</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>, <span class="dv">1</span>, <span class="at">prob =</span> Gamma[sk[t<span class="dv">-1</span>],]) </span>
-<span id="cb2-19"><a href="#cb2-19" tabindex="-1"></a>    xk[t] <span class="ot">=</span> <span class="fu">rnorm</span>(<span class="dv">1</span>, mu[sk[t]], sigma[sk[t]])</span>
-<span id="cb2-20"><a href="#cb2-20" tabindex="-1"></a>  }</span>
-<span id="cb2-21"><a href="#cb2-21" tabindex="-1"></a>  s[(k<span class="dv">-1</span>)<span class="sc">*</span>n <span class="sc">+</span> <span class="dv">1</span><span class="sc">:</span>n] <span class="ot">=</span> sk</span>
-<span id="cb2-22"><a href="#cb2-22" tabindex="-1"></a>  x[(k<span class="dv">-1</span>)<span class="sc">*</span>n <span class="sc">+</span> <span class="dv">1</span><span class="sc">:</span>n] <span class="ot">=</span> xk</span>
-<span id="cb2-23"><a href="#cb2-23" tabindex="-1"></a>}</span>
-<span id="cb2-24"><a href="#cb2-24" tabindex="-1"></a></span>
-<span id="cb2-25"><a href="#cb2-25" tabindex="-1"></a>trackID <span class="ot">=</span> <span class="fu">rep</span>(<span class="dv">1</span><span class="sc">:</span>K, <span class="at">each =</span> n)</span></code></pre></div>
+<span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a>K <span class="ot">=</span> <span class="dv">200</span> <span class="co"># number of individuals</span></span>
+<span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a>N <span class="ot">=</span> <span class="dv">2</span>   <span class="co"># number of states</span></span>
+<span id="cb2-11"><a href="#cb2-11" tabindex="-1"></a>n <span class="ot">=</span> <span class="dv">50</span>  <span class="co"># observations per individual</span></span>
+<span id="cb2-12"><a href="#cb2-12" tabindex="-1"></a></span>
+<span id="cb2-13"><a href="#cb2-13" tabindex="-1"></a>s <span class="ot">=</span> x <span class="ot">=</span> <span class="fu">rep</span>(<span class="cn">NA</span>, n <span class="sc">*</span> K)</span>
+<span id="cb2-14"><a href="#cb2-14" tabindex="-1"></a><span class="cf">for</span>(k <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span>K){</span>
+<span id="cb2-15"><a href="#cb2-15" tabindex="-1"></a>  sk <span class="ot">=</span> xk <span class="ot">=</span> <span class="fu">rep</span>(<span class="cn">NA</span>, n)</span>
+<span id="cb2-16"><a href="#cb2-16" tabindex="-1"></a>  sk[<span class="dv">1</span>] <span class="ot">=</span> <span class="fu">sample</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>, <span class="dv">1</span>, <span class="at">prob =</span> delta)</span>
+<span id="cb2-17"><a href="#cb2-17" tabindex="-1"></a>  xk[<span class="dv">1</span>] <span class="ot">=</span> <span class="fu">rnorm</span>(<span class="dv">1</span>, mu[sk[<span class="dv">1</span>]], sigma[sk[<span class="dv">1</span>]])</span>
+<span id="cb2-18"><a href="#cb2-18" tabindex="-1"></a>  <span class="cf">for</span>(t <span class="cf">in</span> <span class="dv">2</span><span class="sc">:</span>n){</span>
+<span id="cb2-19"><a href="#cb2-19" tabindex="-1"></a>    sk[t] <span class="ot">=</span> <span class="fu">sample</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>, <span class="dv">1</span>, <span class="at">prob =</span> Gamma[sk[t<span class="dv">-1</span>],])</span>
+<span id="cb2-20"><a href="#cb2-20" tabindex="-1"></a>    xk[t] <span class="ot">=</span> <span class="fu">rnorm</span>(<span class="dv">1</span>, mu[sk[t]], sigma[sk[t]])</span>
+<span id="cb2-21"><a href="#cb2-21" tabindex="-1"></a>  }</span>
+<span id="cb2-22"><a href="#cb2-22" tabindex="-1"></a>  s[(k<span class="dv">-1</span>)<span class="sc">*</span>n <span class="sc">+</span> <span class="dv">1</span><span class="sc">:</span>n] <span class="ot">=</span> sk</span>
+<span id="cb2-23"><a href="#cb2-23" tabindex="-1"></a>  x[(k<span class="dv">-1</span>)<span class="sc">*</span>n <span class="sc">+</span> <span class="dv">1</span><span class="sc">:</span>n] <span class="ot">=</span> xk</span>
+<span id="cb2-24"><a href="#cb2-24" tabindex="-1"></a>}</span>
+<span id="cb2-25"><a href="#cb2-25" tabindex="-1"></a></span>
+<span id="cb2-26"><a href="#cb2-26" tabindex="-1"></a>trackID <span class="ot">=</span> <span class="fu">rep</span>(<span class="dv">1</span><span class="sc">:</span>K, <span class="at">each =</span> n)</span></code></pre></div>
 </div>
 <div id="writing-the-negative-log-likelihood-function" class="section level3">
 <h3>Writing the negative log-likelihood function</h3>
-<p>To calculate the joint log-likelihood of the independent tracks, we
-slightly modify the standard negative log-likelihood function by adding
-the additional argument <code>trackID</code>. <code>forward()</code> now
-calculates the sum of indivual likelihood contributions, each starting
-in the respective initial distribution (which we pool here).</p>
-<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="co"># fast version using trackInd in forward()</span></span>
-<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>nll_pool <span class="ot">=</span> <span class="cf">function</span>(par, x, trackID){</span>
-<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a>  Gamma <span class="ot">=</span> <span class="fu">tpm</span>(par[<span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>])</span>
+<p>The likelihood function is almost identical to the single-track case
+— the only difference is passing <code>trackID</code> as an additional
+argument to <code>forward()</code>:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a>nll_pool <span class="ot">=</span> <span class="cf">function</span>(par) {</span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>  <span class="fu">getAll</span>(par, dat)</span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a>  Gamma <span class="ot">=</span> <span class="fu">tpm</span>(eta)</span>
 <span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a>  delta <span class="ot">=</span> <span class="fu">stationary</span>(Gamma)</span>
-<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a>  mu <span class="ot">=</span> par[<span class="dv">3</span><span class="sc">:</span><span class="dv">4</span>]</span>
-<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a>  sigma <span class="ot">=</span> <span class="fu">exp</span>(par[<span class="dv">5</span><span class="sc">:</span><span class="dv">6</span>])</span>
-<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a>  allprobs <span class="ot">=</span> <span class="fu">matrix</span>(<span class="dv">1</span>, <span class="fu">length</span>(x), <span class="dv">2</span>)</span>
-<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a>  <span class="cf">for</span>(j <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>) allprobs[,j] <span class="ot">=</span> <span class="fu">dnorm</span>(x, mu[j], sigma[j])</span>
-<span id="cb3-9"><a href="#cb3-9" tabindex="-1"></a>  </span>
-<span id="cb3-10"><a href="#cb3-10" tabindex="-1"></a>  <span class="co"># here we add trackInd as an argument to forward()</span></span>
-<span id="cb3-11"><a href="#cb3-11" tabindex="-1"></a>  <span class="sc">-</span><span class="fu">forward</span>(delta, Gamma, allprobs, trackID)</span>
-<span id="cb3-12"><a href="#cb3-12" tabindex="-1"></a>}</span>
-<span id="cb3-13"><a href="#cb3-13" tabindex="-1"></a></span>
-<span id="cb3-14"><a href="#cb3-14" tabindex="-1"></a><span class="co"># slow alternative looping over individuals in R</span></span>
-<span id="cb3-15"><a href="#cb3-15" tabindex="-1"></a>nll_pool_slow <span class="ot">=</span> <span class="cf">function</span>(par, x, K){</span>
-<span id="cb3-16"><a href="#cb3-16" tabindex="-1"></a>  n <span class="ot">=</span> <span class="fu">length</span>(x) <span class="sc">/</span> K</span>
-<span id="cb3-17"><a href="#cb3-17" tabindex="-1"></a>  Gamma <span class="ot">=</span> <span class="fu">tpm</span>(par[<span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>])</span>
-<span id="cb3-18"><a href="#cb3-18" tabindex="-1"></a>  delta <span class="ot">=</span> <span class="fu">stationary</span>(Gamma)</span>
-<span id="cb3-19"><a href="#cb3-19" tabindex="-1"></a>  mu <span class="ot">=</span> par[<span class="dv">3</span><span class="sc">:</span><span class="dv">4</span>]</span>
-<span id="cb3-20"><a href="#cb3-20" tabindex="-1"></a>  sigma <span class="ot">=</span> <span class="fu">exp</span>(par[<span class="dv">5</span><span class="sc">:</span><span class="dv">6</span>])</span>
-<span id="cb3-21"><a href="#cb3-21" tabindex="-1"></a>  allprobs <span class="ot">=</span> <span class="fu">matrix</span>(<span class="dv">1</span>, <span class="fu">length</span>(x), <span class="dv">2</span>)</span>
-<span id="cb3-22"><a href="#cb3-22" tabindex="-1"></a>  <span class="cf">for</span>(j <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>) allprobs[,j] <span class="ot">=</span> <span class="fu">dnorm</span>(x, mu[j], sigma[j])</span>
-<span id="cb3-23"><a href="#cb3-23" tabindex="-1"></a>  </span>
-<span id="cb3-24"><a href="#cb3-24" tabindex="-1"></a>  <span class="co"># here we just loop over individuals in R</span></span>
-<span id="cb3-25"><a href="#cb3-25" tabindex="-1"></a>  l <span class="ot">=</span> <span class="dv">0</span></span>
-<span id="cb3-26"><a href="#cb3-26" tabindex="-1"></a>  <span class="cf">for</span>(k <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span>K){</span>
-<span id="cb3-27"><a href="#cb3-27" tabindex="-1"></a>    l <span class="ot">=</span> l <span class="sc">+</span> <span class="fu">forward</span>(delta, Gamma, allprobs[(k<span class="dv">-1</span>)<span class="sc">*</span>n <span class="sc">+</span> <span class="dv">1</span><span class="sc">:</span>n,])</span>
-<span id="cb3-28"><a href="#cb3-28" tabindex="-1"></a>  }</span>
-<span id="cb3-29"><a href="#cb3-29" tabindex="-1"></a>  <span class="sc">-</span>l</span>
-<span id="cb3-30"><a href="#cb3-30" tabindex="-1"></a>}</span></code></pre></div>
+<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a>  mu <span class="ot">=</span> <span class="fu">exp</span>(log_mu); <span class="fu">REPORT</span>(mu)</span>
+<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a>  sigma <span class="ot">=</span> <span class="fu">exp</span>(log_sigma); <span class="fu">REPORT</span>(sigma)</span>
+<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a>  allprobs <span class="ot">=</span> <span class="fu">matrix</span>(<span class="dv">1</span>, <span class="fu">length</span>(x), N)</span>
+<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a>  <span class="cf">for</span>(j <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span>N) allprobs[,j] <span class="ot">=</span> <span class="fu">dnorm</span>(x, mu[j], sigma[j])</span>
+<span id="cb3-9"><a href="#cb3-9" tabindex="-1"></a>  <span class="sc">-</span><span class="fu">forward</span>(delta, Gamma, allprobs, trackID)</span>
+<span id="cb3-10"><a href="#cb3-10" tabindex="-1"></a>}</span></code></pre></div>
 </div>
 <div id="estimating-the-model" class="section level3">
 <h3>Estimating the model</h3>
-<p>Now we estimate the model with complete pooling. We compare the fast
-version using <code>forward()</code> with <code>trackID</code> with the
-slow version also using <code>forward()</code> but looping over
-individuals in <code>R</code>.</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="co"># initial parameter vector</span></span>
-<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>par <span class="ot">=</span> <span class="fu">c</span>(<span class="at">logitgamma =</span> <span class="fu">c</span>(<span class="sc">-</span><span class="dv">1</span>,<span class="sc">-</span><span class="dv">1</span>), <span class="co"># off-diagonals of Gamma (on logit scale)</span></span>
-<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>        <span class="at">mu =</span> <span class="fu">c</span>(<span class="dv">15</span>, <span class="dv">60</span>), <span class="co"># state-dependent means</span></span>
-<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>        <span class="at">logsigma =</span> <span class="fu">c</span>(<span class="fu">log</span>(<span class="dv">10</span>),<span class="fu">log</span>(<span class="dv">40</span>))) <span class="co"># state-dependent sds</span></span>
-<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a></span>
-<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a><span class="co"># fast version:</span></span>
-<span id="cb4-7"><a href="#cb4-7" tabindex="-1"></a><span class="fu">system.time</span>(</span>
-<span id="cb4-8"><a href="#cb4-8" tabindex="-1"></a>  mod <span class="ot">&lt;-</span> <span class="fu">nlm</span>(nll_pool, par, <span class="at">x =</span> x, <span class="at">trackID =</span> trackID)</span>
-<span id="cb4-9"><a href="#cb4-9" tabindex="-1"></a>)</span>
-<span id="cb4-10"><a href="#cb4-10" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb4-11"><a href="#cb4-11" tabindex="-1"></a><span class="co">#&gt;   0.288   0.025   0.313</span></span>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>par <span class="ot">=</span> <span class="fu">list</span>(</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>  <span class="at">eta =</span> <span class="fu">rep</span>(<span class="sc">-</span><span class="dv">2</span>, N<span class="sc">*</span>(N<span class="dv">-1</span>)),    <span class="co"># initial t.p.m. parameters (logit scale)</span></span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>  <span class="at">log_mu =</span> <span class="fu">log</span>(<span class="fu">c</span>(<span class="dv">15</span>, <span class="dv">60</span>)),   <span class="co"># initial state-dependent means (log scale)</span></span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>  <span class="at">log_sigma =</span> <span class="fu">log</span>(<span class="fu">c</span>(<span class="dv">10</span>, <span class="dv">40</span>)) <span class="co"># initial state-dependent sds (log scale)</span></span>
+<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a>)</span>
+<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a></span>
+<span id="cb4-7"><a href="#cb4-7" tabindex="-1"></a>dat <span class="ot">=</span> <span class="fu">list</span>(</span>
+<span id="cb4-8"><a href="#cb4-8" tabindex="-1"></a>  <span class="at">x =</span> x,</span>
+<span id="cb4-9"><a href="#cb4-9" tabindex="-1"></a>  <span class="at">trackID =</span> trackID,</span>
+<span id="cb4-10"><a href="#cb4-10" tabindex="-1"></a>  <span class="at">N =</span> N</span>
+<span id="cb4-11"><a href="#cb4-11" tabindex="-1"></a>)</span>
 <span id="cb4-12"><a href="#cb4-12" tabindex="-1"></a></span>
-<span id="cb4-13"><a href="#cb4-13" tabindex="-1"></a><span class="co"># slow version</span></span>
+<span id="cb4-13"><a href="#cb4-13" tabindex="-1"></a>obj_pool <span class="ot">=</span> <span class="fu">MakeADFun</span>(nll_pool, par, <span class="at">silent =</span> <span class="cn">TRUE</span>)</span>
 <span id="cb4-14"><a href="#cb4-14" tabindex="-1"></a><span class="fu">system.time</span>(</span>
-<span id="cb4-15"><a href="#cb4-15" tabindex="-1"></a>  mod <span class="ot">&lt;-</span> <span class="fu">nlm</span>(nll_pool_slow, par, <span class="at">x =</span> x, <span class="at">K =</span> K)</span>
+<span id="cb4-15"><a href="#cb4-15" tabindex="-1"></a>  opt_pool <span class="ot">&lt;-</span> <span class="fu">nlminb</span>(obj_pool<span class="sc">$</span>par, obj_pool<span class="sc">$</span>fn, obj_pool<span class="sc">$</span>gr)</span>
 <span id="cb4-16"><a href="#cb4-16" tabindex="-1"></a>)</span>
 <span id="cb4-17"><a href="#cb4-17" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb4-18"><a href="#cb4-18" tabindex="-1"></a><span class="co">#&gt;   1.504   0.017   1.520</span></span></code></pre></div>
-<p>In this example, looping over individuals in <code>R</code> already
-leads to five times longer the estimation time, but this can be much
-more severe for more complicated models.</p>
+<span id="cb4-18"><a href="#cb4-18" tabindex="-1"></a><span class="co">#&gt;   0.077   0.000   0.077</span></span>
+<span id="cb4-19"><a href="#cb4-19" tabindex="-1"></a>mod_pool <span class="ot">=</span> <span class="fu">report</span>(obj_pool)</span></code></pre></div>
+<p>We can inspect the estimated parameters, which should be close to the
+true values used in the simulation:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>mod_pool<span class="sc">$</span>mu     <span class="co"># true: 15, 60</span></span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a><span class="co">#&gt; [1] 15.00258 59.10962</span></span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a>mod_pool<span class="sc">$</span>sigma  <span class="co"># true: 10, 40</span></span>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a><span class="co">#&gt; [1]  9.913063 39.856396</span></span>
+<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a>mod_pool<span class="sc">$</span>Gamma  <span class="co"># true: c(0.95, 0.05, 0.15, 0.85)</span></span>
+<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a><span class="co">#&gt;           S1         S2</span></span>
+<span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a><span class="co">#&gt; S1 0.9500705 0.04992952</span></span>
+<span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a><span class="co">#&gt; S2 0.1450977 0.85490231</span></span></code></pre></div>
 </div>
 </div>
 <div id="partial-pooling" class="section level2">
 <h2>Partial pooling</h2>
-<p>If some parameters of our model are individual-specific, while the
-rest is shared, we speak of partial pooling. We demonstrate this here
-for 5 individuals with their own transition probability matrices. We
-could estimate a separate transition probability matrix for each
-individual, but here we opt for a more parsimonious approach, where the
-transition probabilities depend on an external, individual-specific
-covariate. We will estimate the effect of this covariate on the
-transition probabilities.</p>
+<p>If some parameters are individual-specific while the rest are shared,
+we speak of partial pooling. We demonstrate this for <span class="math inline">\(K = 5\)</span> individuals whose transition
+probability matrices depend on an individual-level covariate, while the
+state-dependent observation parameters remain shared. We estimate the
+effect of this covariate on the transition probabilities.</p>
 <div id="generating-data-1" class="section level3">
 <h3>Generating data</h3>
-<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>K <span class="ot">=</span> <span class="dv">5</span> <span class="co"># number of individuals, for example different animals</span></span>
-<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a></span>
-<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a><span class="co"># state-dependent parameters are shared across individuals</span></span>
-<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a>mu <span class="ot">=</span> <span class="fu">c</span>(<span class="dv">15</span>, <span class="dv">60</span>)</span>
-<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a>sigma <span class="ot">=</span> <span class="fu">c</span>(<span class="dv">10</span>, <span class="dv">40</span>)</span>
-<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a></span>
-<span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a><span class="co"># but we define a tpm for each individual depending on covariates</span></span>
-<span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">123</span>)</span>
-<span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a>z <span class="ot">=</span> <span class="fu">rnorm</span>(K) <span class="co"># covariate (e.g. age)</span></span>
-<span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a>beta <span class="ot">=</span> <span class="fu">matrix</span>(<span class="fu">c</span>(<span class="sc">-</span><span class="dv">2</span>,<span class="sc">-</span><span class="dv">2</span>, <span class="dv">1</span>, <span class="sc">-</span><span class="dv">1</span>), <span class="at">nrow =</span> <span class="dv">2</span>)</span>
-<span id="cb5-11"><a href="#cb5-11" tabindex="-1"></a><span class="co"># we calculate 5 tpms depending on individual-specific covariates:</span></span>
-<span id="cb5-12"><a href="#cb5-12" tabindex="-1"></a>Gamma <span class="ot">=</span> <span class="fu">tpm_g</span>(z, beta)</span>
-<span id="cb5-13"><a href="#cb5-13" tabindex="-1"></a><span class="co"># each individual starts in its stationary distribution:</span></span>
-<span id="cb5-14"><a href="#cb5-14" tabindex="-1"></a>Delta <span class="ot">=</span> <span class="fu">matrix</span>(<span class="cn">NA</span>, K, <span class="dv">2</span>)</span>
-<span id="cb5-15"><a href="#cb5-15" tabindex="-1"></a><span class="cf">for</span>(k <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span>K){ Delta[k,] <span class="ot">=</span> <span class="fu">stationary</span>(Gamma[,,k]) }</span>
-<span id="cb5-16"><a href="#cb5-16" tabindex="-1"></a></span>
-<span id="cb5-17"><a href="#cb5-17" tabindex="-1"></a><span class="co"># simulation of all tracks</span></span>
-<span id="cb5-18"><a href="#cb5-18" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">123</span>)</span>
-<span id="cb5-19"><a href="#cb5-19" tabindex="-1"></a>n <span class="ot">=</span> <span class="dv">200</span> <span class="co"># observations per animal only (but many animals)</span></span>
-<span id="cb5-20"><a href="#cb5-20" tabindex="-1"></a>s <span class="ot">=</span> x <span class="ot">=</span> <span class="fu">rep</span>(<span class="cn">NA</span>, n<span class="sc">*</span>K)</span>
-<span id="cb5-21"><a href="#cb5-21" tabindex="-1"></a><span class="cf">for</span>(k <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span>K){</span>
-<span id="cb5-22"><a href="#cb5-22" tabindex="-1"></a>  sk <span class="ot">=</span> xk <span class="ot">=</span> <span class="fu">rep</span>(<span class="cn">NA</span>, n)</span>
-<span id="cb5-23"><a href="#cb5-23" tabindex="-1"></a>  sk[<span class="dv">1</span>] <span class="ot">=</span> <span class="fu">sample</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>, <span class="dv">1</span>, <span class="at">prob =</span> Delta[k, ])</span>
-<span id="cb5-24"><a href="#cb5-24" tabindex="-1"></a>  xk[<span class="dv">1</span>] <span class="ot">=</span> <span class="fu">rnorm</span>(<span class="dv">1</span>, mu[sk[<span class="dv">1</span>]], sigma[sk[<span class="dv">1</span>]])</span>
-<span id="cb5-25"><a href="#cb5-25" tabindex="-1"></a>  <span class="cf">for</span>(t <span class="cf">in</span> <span class="dv">2</span><span class="sc">:</span>n){</span>
-<span id="cb5-26"><a href="#cb5-26" tabindex="-1"></a>    sk[t] <span class="ot">=</span> <span class="fu">sample</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>, <span class="dv">1</span>, <span class="at">prob =</span> Gamma[sk[t<span class="dv">-1</span>],,k]) </span>
-<span id="cb5-27"><a href="#cb5-27" tabindex="-1"></a>    xk[t] <span class="ot">=</span> <span class="fu">rnorm</span>(<span class="dv">1</span>, mu[sk[t]], sigma[sk[t]])</span>
-<span id="cb5-28"><a href="#cb5-28" tabindex="-1"></a>  }</span>
-<span id="cb5-29"><a href="#cb5-29" tabindex="-1"></a>  s[(k<span class="dv">-1</span>)<span class="sc">*</span>n <span class="sc">+</span> <span class="dv">1</span><span class="sc">:</span>n] <span class="ot">=</span> sk</span>
-<span id="cb5-30"><a href="#cb5-30" tabindex="-1"></a>  x[(k<span class="dv">-1</span>)<span class="sc">*</span>n <span class="sc">+</span> <span class="dv">1</span><span class="sc">:</span>n] <span class="ot">=</span> xk</span>
-<span id="cb5-31"><a href="#cb5-31" tabindex="-1"></a>}</span></code></pre></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a>K <span class="ot">=</span> <span class="dv">5</span>   <span class="co"># number of individuals</span></span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a>N <span class="ot">=</span> <span class="dv">2</span>   <span class="co"># number of states</span></span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a>n <span class="ot">=</span> <span class="dv">200</span> <span class="co"># observations per individual</span></span>
+<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a></span>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a><span class="co"># state-dependent parameters shared across individuals</span></span>
+<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a>mu <span class="ot">=</span> <span class="fu">c</span>(<span class="dv">15</span>, <span class="dv">60</span>)</span>
+<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a>sigma <span class="ot">=</span> <span class="fu">c</span>(<span class="dv">10</span>, <span class="dv">40</span>)</span>
+<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a></span>
+<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a><span class="co"># individual-specific tpms depending on a covariate (e.g. age)</span></span>
+<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">123</span>)</span>
+<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a>z <span class="ot">=</span> <span class="fu">rnorm</span>(K)</span>
+<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a>beta <span class="ot">=</span> <span class="fu">matrix</span>(<span class="fu">c</span>(<span class="sc">-</span><span class="dv">2</span>, <span class="sc">-</span><span class="dv">2</span>, <span class="dv">1</span>, <span class="sc">-</span><span class="dv">1</span>), <span class="at">nrow =</span> N<span class="sc">*</span>(N<span class="dv">-1</span>))</span>
+<span id="cb6-13"><a href="#cb6-13" tabindex="-1"></a></span>
+<span id="cb6-14"><a href="#cb6-14" tabindex="-1"></a><span class="co"># compute K individual-specific tpms</span></span>
+<span id="cb6-15"><a href="#cb6-15" tabindex="-1"></a>Gamma <span class="ot">=</span> <span class="fu">tpm</span>(beta, <span class="fu">matrix</span>(z, <span class="at">ncol =</span> <span class="dv">1</span>))</span>
+<span id="cb6-16"><a href="#cb6-16" tabindex="-1"></a><span class="co"># stationary() on an array returns a c(K, N) matrix of stationary distributions</span></span>
+<span id="cb6-17"><a href="#cb6-17" tabindex="-1"></a>Delta <span class="ot">=</span> <span class="fu">stationary</span>(Gamma)</span>
+<span id="cb6-18"><a href="#cb6-18" tabindex="-1"></a></span>
+<span id="cb6-19"><a href="#cb6-19" tabindex="-1"></a><span class="co"># simulate all tracks</span></span>
+<span id="cb6-20"><a href="#cb6-20" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">123</span>)</span>
+<span id="cb6-21"><a href="#cb6-21" tabindex="-1"></a>s <span class="ot">=</span> x <span class="ot">=</span> <span class="fu">rep</span>(<span class="cn">NA</span>, n <span class="sc">*</span> K)</span>
+<span id="cb6-22"><a href="#cb6-22" tabindex="-1"></a><span class="cf">for</span>(k <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span>K){</span>
+<span id="cb6-23"><a href="#cb6-23" tabindex="-1"></a>  sk <span class="ot">=</span> xk <span class="ot">=</span> <span class="fu">rep</span>(<span class="cn">NA</span>, n)</span>
+<span id="cb6-24"><a href="#cb6-24" tabindex="-1"></a>  sk[<span class="dv">1</span>] <span class="ot">=</span> <span class="fu">sample</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>, <span class="dv">1</span>, <span class="at">prob =</span> Delta[k,])</span>
+<span id="cb6-25"><a href="#cb6-25" tabindex="-1"></a>  xk[<span class="dv">1</span>] <span class="ot">=</span> <span class="fu">rnorm</span>(<span class="dv">1</span>, mu[sk[<span class="dv">1</span>]], sigma[sk[<span class="dv">1</span>]])</span>
+<span id="cb6-26"><a href="#cb6-26" tabindex="-1"></a>  <span class="cf">for</span>(t <span class="cf">in</span> <span class="dv">2</span><span class="sc">:</span>n){</span>
+<span id="cb6-27"><a href="#cb6-27" tabindex="-1"></a>    sk[t] <span class="ot">=</span> <span class="fu">sample</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>, <span class="dv">1</span>, <span class="at">prob =</span> Gamma[sk[t<span class="dv">-1</span>],,k])</span>
+<span id="cb6-28"><a href="#cb6-28" tabindex="-1"></a>    xk[t] <span class="ot">=</span> <span class="fu">rnorm</span>(<span class="dv">1</span>, mu[sk[t]], sigma[sk[t]])</span>
+<span id="cb6-29"><a href="#cb6-29" tabindex="-1"></a>  }</span>
+<span id="cb6-30"><a href="#cb6-30" tabindex="-1"></a>  s[(k<span class="dv">-1</span>)<span class="sc">*</span>n <span class="sc">+</span> <span class="dv">1</span><span class="sc">:</span>n] <span class="ot">=</span> sk</span>
+<span id="cb6-31"><a href="#cb6-31" tabindex="-1"></a>  x[(k<span class="dv">-1</span>)<span class="sc">*</span>n <span class="sc">+</span> <span class="dv">1</span><span class="sc">:</span>n] <span class="ot">=</span> xk</span>
+<span id="cb6-32"><a href="#cb6-32" tabindex="-1"></a>}</span></code></pre></div>
 </div>
 <div id="writing-the-negative-log-likelihood-function-1" class="section level3">
 <h3>Writing the negative log-likelihood function</h3>
-<p>Now we write the corresponding negative log-likehood function that
-incorporates the above structure. As each track has a fixed t.p.m., we
-can assume stationarity and compute the stationary initial distribution
-for each track respectively.</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="co"># fast version using trackInd in forward()</span></span>
-<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a>nll_partial <span class="ot">=</span> <span class="cf">function</span>(par, x, z, trackID){</span>
-<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a>  <span class="co"># individual-specific tpms</span></span>
-<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a>  beta <span class="ot">=</span> <span class="fu">matrix</span>(par[<span class="dv">1</span><span class="sc">:</span><span class="dv">4</span>], <span class="at">nrow =</span> <span class="dv">2</span>)</span>
-<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a>  Gamma <span class="ot">=</span> <span class="fu">tpm_g</span>(z, beta)</span>
-<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a>  Delta <span class="ot">=</span> <span class="fu">t</span>(<span class="fu">sapply</span>(<span class="dv">1</span><span class="sc">:</span>k, <span class="cf">function</span>(k) <span class="fu">stationary</span>(Gamma[,,k])))</span>
-<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a>  mu <span class="ot">=</span> par[<span class="dv">5</span><span class="sc">:</span><span class="dv">6</span>]</span>
-<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a>  sigma <span class="ot">=</span> <span class="fu">exp</span>(par[<span class="dv">7</span><span class="sc">:</span><span class="dv">8</span>])</span>
-<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a>  allprobs <span class="ot">=</span> <span class="fu">matrix</span>(<span class="dv">1</span>, <span class="fu">length</span>(x), <span class="dv">2</span>)</span>
-<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a>  <span class="cf">for</span>(j <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>) allprobs[,j] <span class="ot">=</span> <span class="fu">dnorm</span>(x, mu[j], sigma[j])</span>
-<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a>  <span class="co"># just handing a Delta matrix and Gamma array for all individuals to forward()</span></span>
-<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a>  <span class="sc">-</span><span class="fu">forward</span>(Delta, Gamma, allprobs, trackID)</span>
-<span id="cb6-13"><a href="#cb6-13" tabindex="-1"></a>}</span></code></pre></div>
+<p>Each individual has its own constant transition probability matrix,
+determined by its covariate value. We compute all <span class="math inline">\(K\)</span> individual-specific tpms at once using
+<code>tpm()</code>. When passed an array of transition matrices of
+dimension <code>c(N,N,K)</code>, <code>stationary()</code> returns a
+matrix of dimension <code>c(K,N)</code> with the stationary distribution
+for each tpm in its rows. Both are then passed to <code>forward()</code>
+together with <code>trackID</code>.</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a>nll_partial <span class="ot">=</span> <span class="cf">function</span>(par) {</span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a>  <span class="fu">getAll</span>(par, dat)</span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a>  Gamma <span class="ot">=</span> <span class="fu">tpm</span>(beta, <span class="fu">matrix</span>(z, <span class="at">ncol =</span> <span class="dv">1</span>)) <span class="co"># array of K individual-specific tpms</span></span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a>  Delta <span class="ot">=</span> <span class="fu">stationary</span>(Gamma) <span class="co"># when passed an array, returns a matrix of dim c(K, N),</span></span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a>                            <span class="co"># each row being the stationary distribution for one tpm</span></span>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a>  mu <span class="ot">=</span> <span class="fu">exp</span>(log_mu); <span class="fu">REPORT</span>(mu)</span>
+<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a>  sigma <span class="ot">=</span> <span class="fu">exp</span>(log_sigma); <span class="fu">REPORT</span>(sigma)</span>
+<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a>  <span class="fu">REPORT</span>(beta)</span>
+<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a>  allprobs <span class="ot">=</span> <span class="fu">matrix</span>(<span class="dv">1</span>, <span class="fu">length</span>(x), N)</span>
+<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a>  <span class="cf">for</span>(j <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span>N) allprobs[,j] <span class="ot">=</span> <span class="fu">dnorm</span>(x, mu[j], sigma[j])</span>
+<span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a>  <span class="co"># Delta matrix and Gamma array supply individual-specific starts and tpms</span></span>
+<span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a>  <span class="sc">-</span><span class="fu">forward</span>(Delta, Gamma, allprobs, trackID)</span>
+<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a>}</span></code></pre></div>
 </div>
 <div id="estimating-the-model-1" class="section level3">
 <h3>Estimating the model</h3>
-<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="co"># again defining all the indices where a new track begins</span></span>
-<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a>trackID <span class="ot">=</span> <span class="fu">rep</span>(<span class="dv">1</span><span class="sc">:</span>K, <span class="at">each =</span> n)</span>
-<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a></span>
-<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a><span class="co"># initial parameter vector</span></span>
-<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a>par <span class="ot">=</span> <span class="fu">c</span>(<span class="at">beta =</span> <span class="fu">c</span>(<span class="sc">-</span><span class="dv">2</span>, <span class="sc">-</span><span class="dv">2</span>, <span class="dv">0</span>, <span class="dv">0</span>), <span class="co"># beta</span></span>
-<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a>        <span class="at">mu =</span> <span class="fu">c</span>(<span class="dv">15</span>, <span class="dv">60</span>), <span class="co"># state-dependent means</span></span>
-<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a>        <span class="fu">log</span>(<span class="dv">10</span>), <span class="fu">log</span>(<span class="dv">40</span>)) <span class="co"># state-dependent sds</span></span>
-<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a></span>
-<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a><span class="fu">system.time</span>(</span>
-<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a>  mod_partial <span class="ot">&lt;-</span> <span class="fu">nlm</span>(nll_partial, par, <span class="at">x =</span> x, <span class="at">z =</span> z, <span class="at">trackID =</span> trackID)</span>
-<span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a>)</span>
-<span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a><span class="co">#&gt;   0.256   0.003   0.259</span></span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a>trackID <span class="ot">=</span> <span class="fu">rep</span>(<span class="dv">1</span><span class="sc">:</span>K, <span class="at">each =</span> n)</span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a></span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>par <span class="ot">=</span> <span class="fu">list</span>(</span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a>  <span class="at">beta =</span> <span class="fu">matrix</span>(<span class="fu">c</span>(<span class="sc">-</span><span class="dv">2</span>, <span class="sc">-</span><span class="dv">2</span>, <span class="dv">0</span>, <span class="dv">0</span>), <span class="at">nrow =</span> N<span class="sc">*</span>(N<span class="dv">-1</span>)), <span class="co"># regression coefficients for tpm</span></span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a>  <span class="at">log_mu =</span> <span class="fu">log</span>(<span class="fu">c</span>(<span class="dv">15</span>, <span class="dv">60</span>)),                         <span class="co"># initial state-dependent means</span></span>
+<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a>  <span class="at">log_sigma =</span> <span class="fu">log</span>(<span class="fu">c</span>(<span class="dv">10</span>, <span class="dv">40</span>))                       <span class="co"># initial state-dependent sds</span></span>
+<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a>)</span>
+<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a></span>
+<span id="cb8-9"><a href="#cb8-9" tabindex="-1"></a>dat <span class="ot">=</span> <span class="fu">list</span>(</span>
+<span id="cb8-10"><a href="#cb8-10" tabindex="-1"></a>  <span class="at">x =</span> x,</span>
+<span id="cb8-11"><a href="#cb8-11" tabindex="-1"></a>  <span class="at">z =</span> z,</span>
+<span id="cb8-12"><a href="#cb8-12" tabindex="-1"></a>  <span class="at">trackID =</span> trackID,</span>
+<span id="cb8-13"><a href="#cb8-13" tabindex="-1"></a>  <span class="at">N =</span> N</span>
+<span id="cb8-14"><a href="#cb8-14" tabindex="-1"></a>)</span>
+<span id="cb8-15"><a href="#cb8-15" tabindex="-1"></a></span>
+<span id="cb8-16"><a href="#cb8-16" tabindex="-1"></a>obj_partial <span class="ot">=</span> <span class="fu">MakeADFun</span>(nll_partial, par, <span class="at">silent =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb8-17"><a href="#cb8-17" tabindex="-1"></a><span class="fu">system.time</span>(</span>
+<span id="cb8-18"><a href="#cb8-18" tabindex="-1"></a>  opt_partial <span class="ot">&lt;-</span> <span class="fu">nlminb</span>(obj_partial<span class="sc">$</span>par, obj_partial<span class="sc">$</span>fn, obj_partial<span class="sc">$</span>gr)</span>
+<span id="cb8-19"><a href="#cb8-19" tabindex="-1"></a>)</span>
+<span id="cb8-20"><a href="#cb8-20" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
+<span id="cb8-21"><a href="#cb8-21" tabindex="-1"></a><span class="co">#&gt;   0.008   0.000   0.008</span></span>
+<span id="cb8-22"><a href="#cb8-22" tabindex="-1"></a>mod_partial <span class="ot">=</span> <span class="fu">report</span>(obj_partial)</span></code></pre></div>
+<p>The estimated regression coefficients for the transition
+probabilities and the shared state-dependent parameters:</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a>mod_partial<span class="sc">$</span>beta   <span class="co"># true: c(-2, -2, 1, -1)</span></span>
+<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a><span class="co">#&gt;           [,1]       [,2]</span></span>
+<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a><span class="co">#&gt; [1,] -2.055222  0.6029733</span></span>
+<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a><span class="co">#&gt; [2,] -2.088381 -1.2557279</span></span>
+<span id="cb9-5"><a href="#cb9-5" tabindex="-1"></a>mod_partial<span class="sc">$</span>mu     <span class="co"># true: 15, 60</span></span>
+<span id="cb9-6"><a href="#cb9-6" tabindex="-1"></a><span class="co">#&gt; [1] 15.70795 57.88094</span></span>
+<span id="cb9-7"><a href="#cb9-7" tabindex="-1"></a>mod_partial<span class="sc">$</span>sigma  <span class="co"># true: 10, 40</span></span>
+<span id="cb9-8"><a href="#cb9-8" tabindex="-1"></a><span class="co">#&gt; [1] 10.33312 41.92609</span></span></code></pre></div>
+</div>
+</div>
+<div id="random-effects" class="section level2">
+<h2>Random effects</h2>
+<p>In the partial pooling example above, we estimated a separate
+transition probability matrix for each individual based on a fixed
+covariate. An alternative and often more parsimonious approach is to
+treat the individual-level variation in transition probabilities as
+arising from <strong>Gaussian random effects</strong>. Instead of
+estimating <span class="math inline">\(K\)</span> independent transition
+structures, we model each individual’s linear predictor as a deviation
+from a shared population-level intercept: <span class="math display">\[
+\text{logit}(\gamma_{ij}^{(k)}) = \beta_0^{(ij)} + u_{ij}^{(k)}, \quad
+u_{ij}^{(k)} \overset{\text{iid}}{\sim} N\bigl(0, \sigma_u^{(ij)}\bigr),
+\]</span> for each off-diagonal element (<span class="math inline">\(i
+\neq j\)</span>) and each individual <span class="math inline">\(k = 1,
+\dots, K\)</span>. The population-level intercept <span class="math inline">\(\beta_0^{(ij)}\)</span> captures the average
+switching tendency, while <span class="math inline">\(\sigma_u^{(ij)}\)</span> quantifies how much
+individuals vary around it. The number of state-process parameters is
+<span class="math inline">\(2 \times N(N-1)\)</span> — two intercepts
+and two standard deviations for a two-state model — regardless of how
+many individuals are in the data.</p>
+<p>To fit this model we need to integrate out the random effects from
+the joint likelihood. <code>RTMB</code> handles this automatically when
+the random effects are declared via the <code>random</code> argument of
+<code>MakeADFun()</code>.</p>
+<div id="generating-data-2" class="section level3">
+<h3>Generating data</h3>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">123</span>)</span>
+<span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a>K <span class="ot">=</span> <span class="dv">50</span>    <span class="co"># number of individuals</span></span>
+<span id="cb10-3"><a href="#cb10-3" tabindex="-1"></a>N <span class="ot">=</span> <span class="dv">2</span>     <span class="co"># number of states</span></span>
+<span id="cb10-4"><a href="#cb10-4" tabindex="-1"></a>n <span class="ot">=</span> <span class="dv">100</span>   <span class="co"># observations per individual</span></span>
+<span id="cb10-5"><a href="#cb10-5" tabindex="-1"></a></span>
+<span id="cb10-6"><a href="#cb10-6" tabindex="-1"></a><span class="co"># Shared state-dependent parameters</span></span>
+<span id="cb10-7"><a href="#cb10-7" tabindex="-1"></a>mu <span class="ot">=</span> <span class="fu">c</span>(<span class="dv">15</span>, <span class="dv">60</span>)</span>
+<span id="cb10-8"><a href="#cb10-8" tabindex="-1"></a>sigma <span class="ot">=</span> <span class="fu">c</span>(<span class="dv">10</span>, <span class="dv">40</span>)</span>
+<span id="cb10-9"><a href="#cb10-9" tabindex="-1"></a></span>
+<span id="cb10-10"><a href="#cb10-10" tabindex="-1"></a><span class="co"># Population-level intercepts and individual random effects</span></span>
+<span id="cb10-11"><a href="#cb10-11" tabindex="-1"></a>beta_0 <span class="ot">=</span> <span class="fu">c</span>(<span class="sc">-</span><span class="dv">2</span>, <span class="sc">-</span><span class="dv">2</span>)  <span class="co"># one per off-diagonal element</span></span>
+<span id="cb10-12"><a href="#cb10-12" tabindex="-1"></a>sigma_u <span class="ot">=</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">1</span>)   <span class="co"># one per off-diagonal element</span></span>
+<span id="cb10-13"><a href="#cb10-13" tabindex="-1"></a></span>
+<span id="cb10-14"><a href="#cb10-14" tabindex="-1"></a>u_true <span class="ot">=</span> <span class="fu">matrix</span>(<span class="fu">rnorm</span>(K <span class="sc">*</span> N<span class="sc">*</span>(N<span class="dv">-1</span>), <span class="dv">0</span>, <span class="fu">rep</span>(sigma_u, <span class="at">each =</span> K)),</span>
+<span id="cb10-15"><a href="#cb10-15" tabindex="-1"></a>                <span class="at">nrow =</span> K, <span class="at">ncol =</span> N<span class="sc">*</span>(N<span class="dv">-1</span>))</span>
+<span id="cb10-16"><a href="#cb10-16" tabindex="-1"></a></span>
+<span id="cb10-17"><a href="#cb10-17" tabindex="-1"></a><span class="co"># K individual-specific tpms and their stationary distributions</span></span>
+<span id="cb10-18"><a href="#cb10-18" tabindex="-1"></a>Gamma_true <span class="ot">=</span> <span class="fu">array</span>(<span class="cn">NA</span>, <span class="fu">c</span>(N, N, K))</span>
+<span id="cb10-19"><a href="#cb10-19" tabindex="-1"></a><span class="cf">for</span>(k <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span>K) Gamma_true[,,k] <span class="ot">=</span> <span class="fu">tpm</span>(beta_0 <span class="sc">+</span> u_true[k,])</span>
+<span id="cb10-20"><a href="#cb10-20" tabindex="-1"></a>Delta_true <span class="ot">=</span> <span class="fu">stationary</span>(Gamma_true)</span>
+<span id="cb10-21"><a href="#cb10-21" tabindex="-1"></a></span>
+<span id="cb10-22"><a href="#cb10-22" tabindex="-1"></a><span class="co"># Simulate all tracks</span></span>
+<span id="cb10-23"><a href="#cb10-23" tabindex="-1"></a>s <span class="ot">=</span> x <span class="ot">=</span> <span class="fu">rep</span>(<span class="cn">NA</span>, n <span class="sc">*</span> K)</span>
+<span id="cb10-24"><a href="#cb10-24" tabindex="-1"></a><span class="cf">for</span>(k <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span>K){</span>
+<span id="cb10-25"><a href="#cb10-25" tabindex="-1"></a>  sk <span class="ot">=</span> xk <span class="ot">=</span> <span class="fu">rep</span>(<span class="cn">NA</span>, n)</span>
+<span id="cb10-26"><a href="#cb10-26" tabindex="-1"></a>  sk[<span class="dv">1</span>] <span class="ot">=</span> <span class="fu">sample</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>, <span class="dv">1</span>, <span class="at">prob =</span> Delta_true[k,])</span>
+<span id="cb10-27"><a href="#cb10-27" tabindex="-1"></a>  xk[<span class="dv">1</span>] <span class="ot">=</span> <span class="fu">rnorm</span>(<span class="dv">1</span>, mu[sk[<span class="dv">1</span>]], sigma[sk[<span class="dv">1</span>]])</span>
+<span id="cb10-28"><a href="#cb10-28" tabindex="-1"></a>  <span class="cf">for</span>(t <span class="cf">in</span> <span class="dv">2</span><span class="sc">:</span>n){</span>
+<span id="cb10-29"><a href="#cb10-29" tabindex="-1"></a>    sk[t] <span class="ot">=</span> <span class="fu">sample</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>, <span class="dv">1</span>, <span class="at">prob =</span> Gamma_true[sk[t<span class="dv">-1</span>],,k])</span>
+<span id="cb10-30"><a href="#cb10-30" tabindex="-1"></a>    xk[t] <span class="ot">=</span> <span class="fu">rnorm</span>(<span class="dv">1</span>, mu[sk[t]], sigma[sk[t]])</span>
+<span id="cb10-31"><a href="#cb10-31" tabindex="-1"></a>  }</span>
+<span id="cb10-32"><a href="#cb10-32" tabindex="-1"></a>  s[(k<span class="dv">-1</span>)<span class="sc">*</span>n <span class="sc">+</span> <span class="dv">1</span><span class="sc">:</span>n] <span class="ot">=</span> sk</span>
+<span id="cb10-33"><a href="#cb10-33" tabindex="-1"></a>  x[(k<span class="dv">-1</span>)<span class="sc">*</span>n <span class="sc">+</span> <span class="dv">1</span><span class="sc">:</span>n] <span class="ot">=</span> xk</span>
+<span id="cb10-34"><a href="#cb10-34" tabindex="-1"></a>}</span>
+<span id="cb10-35"><a href="#cb10-35" tabindex="-1"></a></span>
+<span id="cb10-36"><a href="#cb10-36" tabindex="-1"></a>trackID <span class="ot">=</span> <span class="fu">rep</span>(<span class="dv">1</span><span class="sc">:</span>K, <span class="at">each =</span> n)</span></code></pre></div>
+</div>
+<div id="writing-the-joint-negative-log-likelihood" class="section level3">
+<h3>Writing the joint negative log-likelihood</h3>
+<p>The joint negative log-likelihood includes both the data likelihood
+(via <code>forward()</code>) and the Gaussian prior on the random
+effects:</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a>jnll_re <span class="ot">=</span> <span class="cf">function</span>(par) {</span>
+<span id="cb11-2"><a href="#cb11-2" tabindex="-1"></a>  <span class="fu">getAll</span>(par, dat)</span>
+<span id="cb11-3"><a href="#cb11-3" tabindex="-1"></a></span>
+<span id="cb11-4"><a href="#cb11-4" tabindex="-1"></a>  <span class="co"># Random effect standard deviations</span></span>
+<span id="cb11-5"><a href="#cb11-5" tabindex="-1"></a>  sigma_u <span class="ot">=</span> <span class="fu">exp</span>(log_sigma_u); <span class="fu">REPORT</span>(sigma_u); <span class="fu">ADREPORT</span>(sigma_u)</span>
+<span id="cb11-6"><a href="#cb11-6" tabindex="-1"></a></span>
+<span id="cb11-7"><a href="#cb11-7" tabindex="-1"></a>  <span class="co"># Gaussian prior on u: u[,ij] ~ N(0, sigma_u[ij])</span></span>
+<span id="cb11-8"><a href="#cb11-8" tabindex="-1"></a>  jnll <span class="ot">=</span> <span class="dv">0</span></span>
+<span id="cb11-9"><a href="#cb11-9" tabindex="-1"></a>  <span class="cf">for</span>(ij <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span>(N<span class="sc">*</span>(N<span class="dv">-1</span>))) {</span>
+<span id="cb11-10"><a href="#cb11-10" tabindex="-1"></a>    jnll <span class="ot">=</span> jnll <span class="sc">-</span> <span class="fu">sum</span>(<span class="fu">dnorm</span>(u[,ij], <span class="dv">0</span>, sigma_u[ij], <span class="at">log =</span> <span class="cn">TRUE</span>))</span>
+<span id="cb11-11"><a href="#cb11-11" tabindex="-1"></a>  }</span>
+<span id="cb11-12"><a href="#cb11-12" tabindex="-1"></a></span>
+<span id="cb11-13"><a href="#cb11-13" tabindex="-1"></a>  <span class="co"># Individual-specific tpms from population intercept + random effect</span></span>
+<span id="cb11-14"><a href="#cb11-14" tabindex="-1"></a>  Gamma <span class="ot">=</span> <span class="fu">AD</span>(<span class="fu">array</span>(<span class="dv">0</span>, <span class="fu">c</span>(N, N, K)))</span>
+<span id="cb11-15"><a href="#cb11-15" tabindex="-1"></a>  <span class="cf">for</span>(k <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span>K) Gamma[,,k] <span class="ot">=</span> <span class="fu">tpm</span>(beta_0 <span class="sc">+</span> u[k,])</span>
+<span id="cb11-16"><a href="#cb11-16" tabindex="-1"></a>  Delta <span class="ot">=</span> <span class="fu">stationary</span>(Gamma)</span>
+<span id="cb11-17"><a href="#cb11-17" tabindex="-1"></a></span>
+<span id="cb11-18"><a href="#cb11-18" tabindex="-1"></a>  <span class="co"># Observation model</span></span>
+<span id="cb11-19"><a href="#cb11-19" tabindex="-1"></a>  mu <span class="ot">=</span> <span class="fu">exp</span>(log_mu); <span class="fu">REPORT</span>(mu)</span>
+<span id="cb11-20"><a href="#cb11-20" tabindex="-1"></a>  sigma <span class="ot">=</span> <span class="fu">exp</span>(log_sigma); <span class="fu">REPORT</span>(sigma)</span>
+<span id="cb11-21"><a href="#cb11-21" tabindex="-1"></a>  allprobs <span class="ot">=</span> <span class="fu">matrix</span>(<span class="dv">1</span>, <span class="fu">length</span>(x), N)</span>
+<span id="cb11-22"><a href="#cb11-22" tabindex="-1"></a>  <span class="cf">for</span>(j <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span>N) allprobs[,j] <span class="ot">=</span> <span class="fu">dnorm</span>(x, mu[j], sigma[j])</span>
+<span id="cb11-23"><a href="#cb11-23" tabindex="-1"></a></span>
+<span id="cb11-24"><a href="#cb11-24" tabindex="-1"></a>  jnll <span class="sc">-</span> <span class="fu">forward</span>(Delta, Gamma, allprobs, trackID)</span>
+<span id="cb11-25"><a href="#cb11-25" tabindex="-1"></a>}</span></code></pre></div>
+</div>
+<div id="estimating-the-model-2" class="section level3">
+<h3>Estimating the model</h3>
+<p>The random effects matrix <code>u</code> is declared via
+<code>random = &quot;u&quot;</code>, telling <code>RTMB</code> to integrate it
+out. The optimiser only sees the marginal (random-effects-free)
+likelihood as a function of the fixed-effect parameters
+<code>beta_0</code>, <code>log_sigma_u</code>, <code>log_mu</code>, and
+<code>log_sigma</code>.</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a>par <span class="ot">=</span> <span class="fu">list</span>(</span>
+<span id="cb12-2"><a href="#cb12-2" tabindex="-1"></a>  <span class="at">beta_0 =</span> <span class="fu">rep</span>(<span class="sc">-</span><span class="dv">2</span>, N<span class="sc">*</span>(N<span class="dv">-1</span>)),      <span class="co"># population-level intercepts</span></span>
+<span id="cb12-3"><a href="#cb12-3" tabindex="-1"></a>  <span class="at">log_sigma_u =</span> <span class="fu">log</span>(<span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">1</span>)),     <span class="co"># log-SDs of random effects</span></span>
+<span id="cb12-4"><a href="#cb12-4" tabindex="-1"></a>  <span class="at">u =</span> <span class="fu">matrix</span>(<span class="dv">0</span>, K, N<span class="sc">*</span>(N<span class="dv">-1</span>)),      <span class="co"># random effects (integrated out)</span></span>
+<span id="cb12-5"><a href="#cb12-5" tabindex="-1"></a>  <span class="at">log_mu =</span> <span class="fu">log</span>(<span class="fu">c</span>(<span class="dv">15</span>, <span class="dv">60</span>)),        <span class="co"># initial state-dependent means</span></span>
+<span id="cb12-6"><a href="#cb12-6" tabindex="-1"></a>  <span class="at">log_sigma =</span> <span class="fu">log</span>(<span class="fu">c</span>(<span class="dv">10</span>, <span class="dv">40</span>))      <span class="co"># initial state-dependent sds</span></span>
+<span id="cb12-7"><a href="#cb12-7" tabindex="-1"></a>)</span>
+<span id="cb12-8"><a href="#cb12-8" tabindex="-1"></a></span>
+<span id="cb12-9"><a href="#cb12-9" tabindex="-1"></a>dat <span class="ot">=</span> <span class="fu">list</span>(</span>
+<span id="cb12-10"><a href="#cb12-10" tabindex="-1"></a>  <span class="at">x =</span> x,</span>
+<span id="cb12-11"><a href="#cb12-11" tabindex="-1"></a>  <span class="at">trackID =</span> trackID,</span>
+<span id="cb12-12"><a href="#cb12-12" tabindex="-1"></a>  <span class="at">K =</span> K,</span>
+<span id="cb12-13"><a href="#cb12-13" tabindex="-1"></a>  <span class="at">N =</span> N</span>
+<span id="cb12-14"><a href="#cb12-14" tabindex="-1"></a>)</span>
+<span id="cb12-15"><a href="#cb12-15" tabindex="-1"></a></span>
+<span id="cb12-16"><a href="#cb12-16" tabindex="-1"></a>obj_re <span class="ot">=</span> <span class="fu">MakeADFun</span>(jnll_re, par, <span class="at">random =</span> <span class="st">&quot;u&quot;</span>, <span class="at">silent =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb12-17"><a href="#cb12-17" tabindex="-1"></a><span class="fu">system.time</span>(</span>
+<span id="cb12-18"><a href="#cb12-18" tabindex="-1"></a>  opt_re <span class="ot">&lt;-</span> <span class="fu">nlminb</span>(obj_re<span class="sc">$</span>par, obj_re<span class="sc">$</span>fn, obj_re<span class="sc">$</span>gr)</span>
+<span id="cb12-19"><a href="#cb12-19" tabindex="-1"></a>)</span>
+<span id="cb12-20"><a href="#cb12-20" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
+<span id="cb12-21"><a href="#cb12-21" tabindex="-1"></a><span class="co">#&gt;   1.176   0.029   1.211</span></span>
+<span id="cb12-22"><a href="#cb12-22" tabindex="-1"></a>mod_re <span class="ot">=</span> <span class="fu">report</span>(obj_re)</span></code></pre></div>
+<p>The estimated standard deviations of the random effects tell us how
+much the transition probabilities vary across individuals. We can check
+the key population-level estimates against the true values used in the
+simulation:</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a>mod_re<span class="sc">$</span>sigma_u  <span class="co"># true: 1, 1</span></span>
+<span id="cb13-2"><a href="#cb13-2" tabindex="-1"></a><span class="co">#&gt; [1] 1.073841 0.934637</span></span>
+<span id="cb13-3"><a href="#cb13-3" tabindex="-1"></a>mod_re<span class="sc">$</span>mu       <span class="co"># true: 15, 60</span></span>
+<span id="cb13-4"><a href="#cb13-4" tabindex="-1"></a><span class="co">#&gt; [1] 14.62212 60.00429</span></span>
+<span id="cb13-5"><a href="#cb13-5" tabindex="-1"></a>mod_re<span class="sc">$</span>sigma    <span class="co"># true: 10, 40</span></span>
+<span id="cb13-6"><a href="#cb13-6" tabindex="-1"></a><span class="co">#&gt; [1]  9.937914 39.891970</span></span></code></pre></div>
+<p>Standard errors for all fixed effects and <code>ADREPORT()</code>ed
+quantities are available via <code>sdreport()</code>:</p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a>sdr_re <span class="ot">=</span> <span class="fu">sdreport</span>(obj_re)</span>
+<span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a><span class="fu">summary</span>(sdr_re, <span class="st">&quot;report&quot;</span>) <span class="co"># sigma_u with SEs</span></span>
+<span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a><span class="co">#&gt;         Estimate Std. Error</span></span>
+<span id="cb14-4"><a href="#cb14-4" tabindex="-1"></a><span class="co">#&gt; sigma_u 1.073841  0.1693166</span></span>
+<span id="cb14-5"><a href="#cb14-5" tabindex="-1"></a><span class="co">#&gt; sigma_u 0.934637  0.1572146</span></span></code></pre></div>
+<blockquote>
+<p>Continue reading with <a href="https://janolefi.github.io/LaMa/articles/Penalised_splines.html"><strong>Penalised
+splines</strong></a>.</p>
+</blockquote>
 </div>
 </div>
 

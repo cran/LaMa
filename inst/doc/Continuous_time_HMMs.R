@@ -8,137 +8,211 @@ knitr::opts_chunk$set(
   out.width = "85%"
 )
 
+options(rmarkdown.html_vignette.check_title = FALSE)
+
 ## ----setup--------------------------------------------------------------------
-# loading the package
 library(LaMa)
 
 ## ----parameters---------------------------------------------------------------
-# generator matrix Q:
-Q = matrix(c(-0.5, 0.5, 1, -1), 
-           nrow = 2, byrow = TRUE)
+# generator matrix Q
+Q = matrix(c(-0.5, 0.5,
+              1.0, -1.0), nrow = 2, byrow = TRUE)
 
-# parameters for the state-dependent (normal) distributions
+# state-dependent (normal) distribution parameters
 mu = c(5, 20)
 sigma = c(2, 5)
 
 ## ----data---------------------------------------------------------------------
 set.seed(123)
 
-k = 200 # number of state switches
-trans_times = s = rep(NA, k) # time points where the chain transitions
-s[1] = sample(1:2, 1) # initial distribution c(0.5, 0.5)
-# exponentially distributed waiting times
-trans_times[1] = rexp(1, -Q[s[1],s[1]])
-n_arrivals = rpois(1, trans_times[1])
-obs_times = sort(runif(n_arrivals, 0, trans_times[1]))
-x = rnorm(n_arrivals, mu[s[1]], sigma[s[1]])
+k = 200              # number of state switches to simulate
+s = rep(NA, k)       # latent state sequence
+trans_times = rep(NA, k) # cumulative times at which state switches occur
+
+# initialise: draw first state and its dwell time
+s[1] = sample(1:2, 1)
+dwell = rexp(1, -Q[s[1], s[1]])  # dwell time ~ Exp(-q_ii)
+trans_times[1] = dwell
+
+# Poisson arrivals during first sojourn [0, dwell], uniform within
+new_obs = sort(runif(rpois(1, dwell), 0, dwell))
+obs_times = new_obs
+x = rnorm(length(new_obs), mu[s[1]], sigma[s[1]])
+
 for(t in 2:k){
-  s[t] = c(1,2)[-s[t-1]] # for 2-states, always a state switch when transitioning
-  # exponentially distributed waiting times
-  trans_times[t] = trans_times[t-1] + rexp(1, -Q[s[t], s[t]])
-  n_arrivals = rpois(1, trans_times[t]-trans_times[t-1])
-  obs_times = c(obs_times, 
-                sort(runif(n_arrivals, trans_times[t-1], trans_times[t])))
-  x = c(x, rnorm(n_arrivals, mu[s[t]], sigma[s[t]]))
+  # for 2 states, the only possible next state is 3 - current
+  s[t] = 3 - s[t-1]
+
+  # dwell time in new state, and absolute transition time
+  dwell = rexp(1, -Q[s[t], s[t]])
+  trans_times[t] = trans_times[t-1] + dwell
+
+  # Poisson arrivals during sojourn [t_start, t_end], uniform within
+  t_start = trans_times[t-1]
+  t_end   = trans_times[t]
+  new_obs = sort(runif(rpois(1, dwell), t_start, t_end))
+
+  obs_times = c(obs_times, new_obs)
+  x = c(x, rnorm(length(new_obs), mu[s[t]], sigma[s[t]]))
 }
 
 ## ----vis_ctHMM----------------------------------------------------------------
-color = c("orange", "deepskyblue")
+color = LaMaColors(2)
 
 n = length(obs_times)
-plot(obs_times[1:50], x[1:50], pch = 16, bty = "n", xlab = "observation times", 
-     ylab = "x", ylim = c(-5,25))
-segments(x0 = c(0,trans_times[1:48]), x1 = trans_times[1:49], 
-         y0 = rep(-5,50), y1 = rep(-5,50), col = color[s[1:49]], lwd = 4)
-legend("topright", lwd = 2, col = color, 
+plot(obs_times[1:50], x[1:50], pch = 16, bty = "n",
+     xlab = "observation times", ylab = "x", ylim = c(-5, 25))
+segments(x0 = c(0, trans_times[1:48]), x1 = trans_times[1:49],
+         y0 = rep(-5, 49), y1 = rep(-5, 49),
+         col = color[s[1:49]], lwd = 4)
+legend("topright", lwd = 2, col = color,
        legend = c("state 1", "state 2"), box.lwd = 0)
 
-## ----mllk---------------------------------------------------------------------
-nll = function(par, timediff, x, N){
-  mu = par[1:N]
-  sigma = exp(par[N+1:N])
-  Q = generator(par[2*N+1:(N*(N-1))]) # generator matrix
-  Pi = stationary_cont(Q) # stationary dist of CT Markov chain
-  Qube = tpm_cont(Q, timediff) # this computes exp(Q*timediff)
-  allprobs = matrix(1, nrow = length(x), ncol = N)
+## ----nll----------------------------------------------------------------------
+nll = function(par) {
+  getAll(par, dat)
+  mu = exp(log_mu); REPORT(mu)
+  sigma = exp(log_sigma); REPORT(sigma)
+  Q = generator(log_qs); REPORT(Q)  # maps unconstrained params -> valid Q
+  Pi = stationary_ct(Q)             # stationary distribution of the CTMC
+  Qube = tpm_ct(Q, timediff)     # exp(Q * dt) for each time difference
+  allprobs = matrix(1, length(x), N)
   ind = which(!is.na(x))
-  for(j in 1:N){
-    allprobs[ind,j] = dnorm(x[ind], mu[j], sigma[j])
-  }
-  -forward_g(Pi, Qube, allprobs)
+  for(j in 1:N) allprobs[ind, j] = dnorm(x[ind], mu[j], sigma[j])
+  -forward(Pi, Qube, allprobs)
 }
 
-## ----model, warning=FALSE-----------------------------------------------------
-par = c(mu = c(5, 15), # state-dependent means
-        logsigma = c(log(3), log(5)), # state-dependent sds
-        qs = c(log(1), log(0.5))) # off-diagonals of Q
+## ----model, warning = FALSE---------------------------------------------------
+N = 2
+timediff = diff(obs_times) # time differences between consecutive observations
 
-timediff = diff(obs_times)
-
-system.time(
-  mod <- nlm(nll, par, timediff = timediff, x = x, N = 2)
+par = list(
+  log_mu = log(c(5, 15)),    # initial state-dependent means (log scale)
+  log_sigma = log(c(3, 5)),  # initial state-dependent sds (log scale)
+  log_qs = log(c(1, 0.5))    # initial off-diagonal generator entries (log scale)
 )
 
+dat = list(
+  x = x,
+  timediff = timediff,
+  N = N
+)
+
+obj = MakeADFun(nll, par, silent = TRUE)
+system.time(
+  opt <- nlminb(obj$par, obj$fn, obj$gr)
+)
+mod = report(obj)
+
 ## ----results------------------------------------------------------------------
-N = 2
-# mu
-round(mod$estimate[1:N],2)
-# sigma
-round(exp(mod$estimate[N+1:N]))
-Q = generator(mod$estimate[2*N+1:(N*(N-1))])
-round(Q,3)
+mod$mu     # true: 5, 20
+mod$sigma  # true: 2, 5
+round(mod$Q, 3) # true: Q as defined above
+
+## ----dwell_times--------------------------------------------------------------
+round(1 / diag(-mod$Q), 2) # estimated mean dwell times; true: 2, 1
+
+## ----tpm_curves---------------------------------------------------------------
+dt_seq = seq(0, 10, length.out = 300)
+Qube_seq = tpm_ct(mod$Q, dt_seq)
+Pi_ct = stationary_ct(mod$Q)
+
+plot(dt_seq, Qube_seq[1, 2, ], type = "l", lwd = 2, col = color[1], bty = "n",
+     xlab = expression(Delta*t), ylab = "transition probability", ylim = c(0, 1))
+lines(dt_seq, Qube_seq[2, 1, ], lwd = 2, col = color[2])
+abline(h = Pi_ct[2], lty = 2, col = color[1])  # long-run limit of gamma_12
+abline(h = Pi_ct[1], lty = 2, col = color[2])  # long-run limit of gamma_21
+legend("right", lwd = 2, col = color, bty = "n",
+       legend = c(expression(gamma[12](Delta*t)), expression(gamma[21](Delta*t))))
+
+## ----state_decoding-----------------------------------------------------------
+states = viterbi(mod = mod)
+
+plot(obs_times[1:50], x[1:50], pch = 16, bty = "n",
+     col = color[states[1:50]],
+     xlab = "observation times", ylab = "x", ylim = c(-5, 25))
+legend("topright", pch = 16, col = color,
+       legend = paste("state", 1:N), box.lwd = 0)
 
 ## ----parameters2--------------------------------------------------------------
-# generator matrix Q:
-Q = matrix(c(-0.5,0.2,0.3,
-             1,-2, 1,
-             0.4, 0.6, -1), nrow = 3, byrow = TRUE)
+# generator matrix Q
+Q = matrix(c(-0.5, 0.2, 0.3,
+              1.0, -2.0, 1.0,
+              0.4,  0.6, -1.0), nrow = 3, byrow = TRUE)
 
-# parameters for the state-dependent (normal) distributions
+# state-dependent (normal) distribution parameters
 mu = c(5, 15, 30)
 sigma = c(2, 3, 5)
 
 ## ----data2--------------------------------------------------------------------
 set.seed(123)
 
-k = 200 # number of state switches
-trans_times = s = rep(NA, k) # time points where the chain transitions
-s[1] = sample(1:3, 1) # uniform initial distribution
-# exponentially distributed waiting times
-trans_times[1] = rexp(1, -Q[s[1],s[1]])
-n_arrivals = rpois(1, trans_times[1])
-obs_times = sort(runif(n_arrivals, 0, trans_times[1]))
-x = rnorm(n_arrivals, mu[s[1]], sigma[s[1]])
+k = 200
+s = rep(NA, k)
+trans_times = rep(NA, k)
+
+# initialise
+s[1] = sample(1:3, 1)
+dwell = rexp(1, -Q[s[1], s[1]])
+trans_times[1] = dwell
+
+new_obs = sort(runif(rpois(1, dwell), 0, dwell))
+obs_times = new_obs
+x = rnorm(length(new_obs), mu[s[1]], sigma[s[1]])
+
 for(t in 2:k){
-  # off-diagonal elements of the s[t-1] row of Q divided by the diagonal element
-  # give the probabilities of the next state
-  s[t] = sample(c(1:3)[-s[t-1]], 1, prob = Q[s[t-1],-s[t-1]]/-Q[s[t-1],s[t-1]])
-  # exponentially distributed waiting times
-  trans_times[t] = trans_times[t-1] + rexp(1, -Q[s[t], s[t]])
-  n_arrivals = rpois(1, trans_times[t]-trans_times[t-1])
-  obs_times = c(obs_times, 
-                sort(runif(n_arrivals, trans_times[t-1], trans_times[t])))
-  x = c(x, rnorm(n_arrivals, mu[s[t]], sigma[s[t]]))
+  # conditional transition probabilities: omega_ij = q_ij / (-q_ii)
+  omega = Q[s[t-1], -s[t-1]] / -Q[s[t-1], s[t-1]]
+  s[t] = sample((1:3)[-s[t-1]], 1, prob = omega)
+
+  dwell = rexp(1, -Q[s[t], s[t]])
+  trans_times[t] = trans_times[t-1] + dwell
+
+  t_start = trans_times[t-1]
+  t_end   = trans_times[t]
+  new_obs = sort(runif(rpois(1, dwell), t_start, t_end))
+
+  obs_times = c(obs_times, new_obs)
+  x = c(x, rnorm(length(new_obs), mu[s[t]], sigma[s[t]]))
 }
 
-## ----model2, warning=FALSE----------------------------------------------------
-par = c(mu = c(5, 10, 25), # state-dependent means
-        logsigma = c(log(2), log(2), log(6)), # state-dependent sds
-        qs = rep(0, 6)) # off-diagonals of Q
-
+## ----model2, warning = FALSE--------------------------------------------------
+N = 3
 timediff = diff(obs_times)
 
-system.time(
-  mod2 <- nlm(nll, par, timediff = timediff, x = x, N = 3, stepmax = 10)
+par = list(
+  log_mu = log(c(5, 10, 25)),   # initial state-dependent means
+  log_sigma = log(c(2, 2, 6)),  # initial state-dependent sds
+  log_qs = rep(0, N*(N-1))      # initial off-diagonal generator entries (exp(0) = 1)
 )
-# without restricting stepmax, we run into numerical problems
+
+dat = list(
+  x = x,
+  timediff = timediff,
+  N = N
+)
+
+obj2 = MakeADFun(nll, par, silent = TRUE)
+system.time(
+  opt2 <- nlminb(obj2$par, obj2$fn, obj2$gr)
+)
+mod2 = report(obj2)
 
 ## ----results2-----------------------------------------------------------------
-N = 3
-# mu
-round(mod2$estimate[1:N],2)
-# sigma
-round(exp(mod2$estimate[N+1:N]),2)
-Q = generator(mod2$estimate[2*N+1:(N*(N-1))])
-round(Q, 3)
+mod2$mu     # true: 5, 15, 30
+mod2$sigma  # true: 2, 3, 5
+round(mod2$Q, 3) # true: Q as defined above
+
+## ----dwell_times2-------------------------------------------------------------
+round(1 / diag(-mod2$Q), 2) # estimated mean dwell times; true: 2, 0.5, 1
+
+## ----state_decoding2----------------------------------------------------------
+color3 = LaMaColors(3)
+states2 = viterbi(mod = mod2)
+
+plot(obs_times[1:50], x[1:50], pch = 16, bty = "n",
+     col = color3[states2[1:50]],
+     xlab = "observation times", ylab = "x", ylim = c(-5, 40))
+legend("topright", pch = 16, col = color3,
+       legend = paste("state", 1:N), box.lwd = 0)
 

@@ -108,8 +108,8 @@ The user has to specify the \strong{penalised negative log-likelihood function} 
 data = trex[1:1000,] # subset
 
 # initial parameter list
-par = list(logmu = log(c(0.3, 1)), # step mean
-           logsigma = log(c(0.2, 0.7)), # step sd
+par = list(logmu = log(c(0.3, 2.5)), # step mean
+           logsigma = log(c(0.3, 1.5)), # step sd
            beta0 = c(-2,-2), # state process intercept
            betaspline = matrix(rep(0, 18), nrow = 2)) # state process spline coefs
           
@@ -142,7 +142,7 @@ pnll = function(par) {
 }
 
 # model fitting
-mod = qreml(pnll, par, dat, random = "betaspline")
+mod = qreml(pnll, par, dat, random = "betaspline", silent = 2)
 }
 \references{
 Koslik, J. O. (2024). Efficient smoothness selection for nonparametric Markov-switching models via quasi restricted maximum likelihood. arXiv preprint arXiv:2411.11498.

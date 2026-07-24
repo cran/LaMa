@@ -8,6 +8,8 @@ knitr::opts_chunk$set(
   out.width = "85%"
 )
 
+options(rmarkdown.html_vignette.check_title = FALSE)
+
 ## ----setup and data-----------------------------------------------------------
 library(LaMa)
 
@@ -62,7 +64,7 @@ sigma = mod_multi$sigma
 kappa = mod_multi$kappa
 
 # defining color vector
-color = c("orange", "deepskyblue")
+color = LaMaColors(2)
 
 oldpar = par(mfrow = c(1,2))
 
@@ -139,16 +141,19 @@ nll_cov = function(par) {
 }
 
 ## ----model, warning=FALSE-----------------------------------------------------
+N = 2
+
 par = list(
-  beta = cbind(rep(-2, 2), matrix(0, 2, 2)), # initialising with slopes = 0
-  logit_delta = 0,                           # starting value for initial distribution
-  mu = c(4, 14),                             # initial state-dependent means
-  log_sigma = c(log(3), log(5))              # initial state-dependent sds
+  beta = cbind(rep(-2, N*(N-1)), 
+               matrix(0, N*(N-1), 2)),   # initialising with slopes = 0
+  logit_delta = rep(0, N-1),             # starting value for initial distribution
+  mu = seq(4, 14, length = N),           # initial state-dependent means
+  log_sigma = log(seq(3,5, length = N))  # initial state-dependent sds
 )
-dat <- list(
+dat = list(
   x = x, 
   Z = Z,
-  N = 2
+  N = N
 )
 
 obj_cov = MakeADFun(nll_cov, par, silent = TRUE)
@@ -259,9 +264,9 @@ nll_msr = function(par) {
 
 ## ----model3, warning=FALSE----------------------------------------------------
 par = list(
-  eta = rep(-2, 2),                        # starting values state process
+  eta = c(-3, -2),                          # starting values state process
   beta = cbind(c(10, 10), matrix(0, 2, 2)), # starting values for regression
-  log_sigma = c(log(1), log(1))            # starting values for sigma
+  log_sigma = c(log(1), log(1))             # starting values for sigma
 )
 dat = list(
   x = x,
@@ -279,13 +284,15 @@ delta_hat_reg = mod_msr$delta
 sigma_hat_reg = mod_msr$sigma
 beta_hat_reg = mod_msr$beta
 
+states = viterbi(mod = mod_msr)
+
 # we have some label switching
-plot(z, x, pch = 16, bty = "n", xlab = "z", ylab = "x", col = color[s])
+plot(z, x, pch = 16, bty = "n", xlab = "z", ylab = "x", col = color[states])
 points(z, x, pch = 20)
 curve(beta_hat_reg[1,1] + beta_hat_reg[1,2]*x + beta_hat_reg[1,3]*x^2, 
-      add = TRUE, lwd = 4, col = color[2])
-curve(beta_hat_reg[2,1] + beta_hat_reg[2,2]*x + beta_hat_reg[2,3]*x^2, 
       add = TRUE, lwd = 4, col = color[1])
+curve(beta_hat_reg[2,1] + beta_hat_reg[2,2]*x + beta_hat_reg[2,3]*x^2, 
+      add = TRUE, lwd = 4, col = color[2])
 
 ## ----cosinor------------------------------------------------------------------
 Z_tod = cosinor(1:24, period = 24)
@@ -296,8 +303,8 @@ head(trex, 6)
 
 ## ----parameters seasonal------------------------------------------------------
 par = list(
-  log_mu = log(c(0.3, 1)),      # initial means for step length
-  log_sigma = log(c(0.2, 0.7)), # initial sds for step length
+  log_mu = log(c(0.3, 1)),                # initial means for step length
+  log_sigma = log(c(0.2, 0.7)),           # initial sds for step length
   beta = cbind(c(-2,-2), matrix(0, 2, 2)) # initial t.p.m. parameters
 )    
 

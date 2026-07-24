@@ -7,6 +7,8 @@ knitr::opts_chunk$set(
   error = TRUE
 )
 
+options(rmarkdown.html_vignette.check_title = FALSE)
+
 # check if MSwM is installed and if not install
 if(!require("MSwM")){
   options(repos = c(CRAN = "https://cloud.r-project.org"))
@@ -22,10 +24,6 @@ library(LaMa)
 
 head(trex)
 
-## ----TapeConfig, include=FALSE------------------------------------------------
-old <- RTMB::TapeConfig()
-RTMB::TapeConfig(matmul = "plain") # speeds up forward algorithm
-
 ## ----tod2---------------------------------------------------------------------
 modmat = make_matrices(~ s(tod, bs = "cp"), # formula
                        data = data.frame(tod = 1:24), # data
@@ -37,7 +35,7 @@ S = modmat$S # penalty matrix
 pnll = function(par) {
   getAll(par, dat)
   # cbinding intercept and spline coefs, because intercept is not penalised
-  Gamma = tpm_g(Z, cbind(beta0, betaSpline))
+  Gamma = tpm(cbind(beta0, betaSpline), Z)
   # computing all periodically stationary distributions for easy access later
   Delta = stationary_p(Gamma); REPORT(Delta)
   # parameter transformations
@@ -50,7 +48,7 @@ pnll = function(par) {
   for(j in 1:N){
     allprobs[ind,j] = dgamma2(step[ind],mu[j],sigma[j]) * dvm(angle[ind],0,kappa[j])
   }
-  -forward_g(Delta[tod[1],], Gamma[,,tod], allprobs) + # regular forward algorithm
+  -forward(Delta[tod[1],], Gamma[,,tod], allprobs) + # regular forward algorithm
     penalty(betaSpline, S, lambda) # this does all the penalisation work
 }
 
@@ -75,21 +73,51 @@ system.time(
 )
 
 ## ----results qreml, fig.width = 9, fig.height = 5-----------------------------
-Delta = mod1$Delta
+color = LaMaColors(2)
 
 tod_seq = seq(0, 24, length = 100)
 Z_p = predict(modmat, data.frame(tod = tod_seq))
 
-Gamma_plot = tpm_g(Z_p, mod1$beta) # interpolating transition probs
+# MC samples: with report = TRUE, REPORT()ed quantities are sampled directly
+samples = MCreport(mod1$obj, report = TRUE)
 
-plot(tod_seq, Gamma_plot[1,2,], type = "l", lwd = 2, ylim = c(0,1),
-     xlab = "time of day", ylab = "transition probability", bty = "n")
-lines(tod_seq, Gamma_plot[2,1,], lwd = 2, lty = 3)
-legend("topleft", lwd = 2, lty = c(1,3), bty = "n",
+# transition probability samples on the plotting grid
+g12 = sapply(samples$beta, function(b) tpm(b, Z_p)[1,2,])
+g21 = sapply(samples$beta, function(b) tpm(b, Z_p)[2,1,])
+g12.q = apply(g12, 1, quantile, probs = c(0.025, 0.975))
+g21.q = apply(g21, 1, quantile, probs = c(0.025, 0.975))
+
+# Delta[,2] samples available directly via report = TRUE
+Delta2.samples = sapply(samples$Delta, function(d) d[,2])
+Delta2.q = apply(Delta2.samples, 1, quantile, probs = c(0.025, 0.975))
+
+# MLE quantities
+Gamma_plot = tpm(mod1$beta, Z_p)
+Delta = mod1$Delta
+
+oldpar = par(mfrow = c(1, 2))
+
+# transition probabilities with 95% confidence bands
+plot(NA, bty = "n", ylim = c(0, 1), xlim = c(0, 24),
+     xlab = "time of day", ylab = "transition probability")
+polygon(c(tod_seq, rev(tod_seq)), c(g12.q[1,], rev(g12.q[2,])),
+        col = adjustcolor(color[1], 0.3), border = NA)
+lines(tod_seq, Gamma_plot[1,2,], lwd = 2, col = color[1])
+polygon(c(tod_seq, rev(tod_seq)), c(g21.q[1,], rev(g21.q[2,])),
+        col = adjustcolor(color[2], 0.3), border = NA)
+lines(tod_seq, Gamma_plot[2,1,], lwd = 2, col = color[2])
+legend("topleft", lwd = 2, col = color, bty = "n",
        legend = c(expression(gamma[12]^(t)), expression(gamma[21]^(t))))
-plot(Delta[,2], type = "b", lwd = 2, pch = 16, xlab = "time of day", ylab = "Pr(active)", 
+
+# periodically stationary distribution with 95% confidence band
+plot(Delta[,2], type = "b", lwd = 2, pch = 16, ylim = c(0, 1),
+     xlab = "time of day", ylab = "Pr(active)",
      col = "deepskyblue", bty = "n", xaxt = "n")
-axis(1, at = seq(0,24,by=4), labels = seq(0,24,by=4))
+polygon(c(1:24, 24:1), c(Delta2.q[1,], rev(Delta2.q[2,])),
+        col = adjustcolor("deepskyblue", 0.3), border = NA)
+axis(1, at = seq(0, 24, by = 4), labels = seq(0, 24, by = 4))
+
+par(oldpar)
 
 ## ----shark_data, fig.width = 9, fig.height = 5--------------------------------
 head(nessi)
@@ -125,10 +153,10 @@ obj = MakeADFun(nll, par, silent = TRUE)
 opt = nlminb(obj$par, obj$fn, obj$gr)
 
 # reporting to get calculated quantities
-mod = obj$report()
+mod = report(obj)
 
 # visualising the results
-color = c("orange", "deepskyblue", "seagreen3")
+color = LaMaColors(3)
 hist(nessi$logODBA, prob = TRUE, breaks = 50, bor = "white",
      main = "", xlab = "log(ODBA)")
 for(j in 1:3) curve(mod$delta[j] * dnorm(x, mod$mu[j], mod$sigma[j]), 
@@ -254,7 +282,7 @@ Sigma_plot = exp(Z_p %*% t(mod3$alpha))
 
 library(scales) # to make colors semi-transparent
 
-par(mfrow = c(1,2))
+oldpar = par(mfrow = c(1,2))
 
 # state-dependent distribution as a function of oil price
 plot(energy$Oil, energy$Price, pch = 20, bty = "n", col = alpha(color[energy$states], 0.1),
@@ -271,10 +299,7 @@ legend("topright", bty = "n", legend = paste("state", 1:2), col = color, lwd = 3
 plot(NA, xlim = c(0, nrow(energy)), ylim = c(1,10), bty = "n",
      xlab = "time", ylab = "energy price")
 segments(x0 = 1:(nrow(energy)-1), x1 = 2:nrow(energy),
-         y0 = energy$Price[-nrow(energy)], y1 = energy$Price[-1], 
+         y0 = energy$Price[-nrow(energy)], y1 = energy$Price[-1],
          col = color[energy$states[-1]], lwd = 0.5)
-
-
-## ----restore_tapeConfig, include = FALSE--------------------------------------
-RTMB::TapeConfig(old) # restoring old config
+par(oldpar)
 

@@ -14,6 +14,8 @@ if(!require("PHSMM")){
   install.packages("PHSMM")
 }
 
+options(rmarkdown.html_vignette.check_title = FALSE)
+
 ## ----setup--------------------------------------------------------------------
 # loading the package
 library(LaMa)
