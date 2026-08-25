@@ -487,7 +487,7 @@ example in models with local state dependence — the default
 <span id="cb5-15"><a href="#cb5-15" tabindex="-1"></a>  opt <span class="ot">&lt;-</span> <span class="fu">nlminb</span>(obj<span class="sc">$</span>par, obj<span class="sc">$</span>fn, obj<span class="sc">$</span>gr)</span>
 <span id="cb5-16"><a href="#cb5-16" tabindex="-1"></a>)</span>
 <span id="cb5-17"><a href="#cb5-17" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb5-18"><a href="#cb5-18" tabindex="-1"></a><span class="co">#&gt;   0.388   0.004   0.395</span></span>
+<span id="cb5-18"><a href="#cb5-18" tabindex="-1"></a><span class="co">#&gt;   0.402   0.004   0.410</span></span>
 <span id="cb5-19"><a href="#cb5-19" tabindex="-1"></a>mod <span class="ot">=</span> <span class="fu">report</span>(obj)</span></code></pre></div>
 </div>
 <div id="results" class="section level3">
@@ -582,7 +582,7 @@ marginalises over it internally.</p>
 <span id="cb9-12"><a href="#cb9-12" tabindex="-1"></a>  opt_lap <span class="ot">&lt;-</span> <span class="fu">nlminb</span>(obj_lap<span class="sc">$</span>par, obj_lap<span class="sc">$</span>fn, obj_lap<span class="sc">$</span>gr)</span>
 <span id="cb9-13"><a href="#cb9-13" tabindex="-1"></a>)</span>
 <span id="cb9-14"><a href="#cb9-14" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb9-15"><a href="#cb9-15" tabindex="-1"></a><span class="co">#&gt;   0.072   0.002   0.077</span></span>
+<span id="cb9-15"><a href="#cb9-15" tabindex="-1"></a><span class="co">#&gt;   0.078   0.002   0.082</span></span>
 <span id="cb9-16"><a href="#cb9-16" tabindex="-1"></a>mod_lap <span class="ot">=</span> <span class="fu">report</span>(obj_lap)</span></code></pre></div>
 <div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a>mod_lap<span class="sc">$</span>phi    <span class="co"># true: 0.95</span></span>
 <span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a><span class="co">#&gt; [1] 0.9525517</span></span>

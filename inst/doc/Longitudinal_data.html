@@ -444,7 +444,7 @@ argument to <code>forward()</code>:</p>
 <span id="cb4-15"><a href="#cb4-15" tabindex="-1"></a>  opt_pool <span class="ot">&lt;-</span> <span class="fu">nlminb</span>(obj_pool<span class="sc">$</span>par, obj_pool<span class="sc">$</span>fn, obj_pool<span class="sc">$</span>gr)</span>
 <span id="cb4-16"><a href="#cb4-16" tabindex="-1"></a>)</span>
 <span id="cb4-17"><a href="#cb4-17" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb4-18"><a href="#cb4-18" tabindex="-1"></a><span class="co">#&gt;   0.077   0.000   0.077</span></span>
+<span id="cb4-18"><a href="#cb4-18" tabindex="-1"></a><span class="co">#&gt;   0.079   0.000   0.079</span></span>
 <span id="cb4-19"><a href="#cb4-19" tabindex="-1"></a>mod_pool <span class="ot">=</span> <span class="fu">report</span>(obj_pool)</span></code></pre></div>
 <p>We can inspect the estimated parameters, which should be close to the
 true values used in the simulation:</p>
@@ -545,7 +545,7 @@ together with <code>trackID</code>.</p>
 <span id="cb8-18"><a href="#cb8-18" tabindex="-1"></a>  opt_partial <span class="ot">&lt;-</span> <span class="fu">nlminb</span>(obj_partial<span class="sc">$</span>par, obj_partial<span class="sc">$</span>fn, obj_partial<span class="sc">$</span>gr)</span>
 <span id="cb8-19"><a href="#cb8-19" tabindex="-1"></a>)</span>
 <span id="cb8-20"><a href="#cb8-20" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb8-21"><a href="#cb8-21" tabindex="-1"></a><span class="co">#&gt;   0.008   0.000   0.008</span></span>
+<span id="cb8-21"><a href="#cb8-21" tabindex="-1"></a><span class="co">#&gt;   0.008   0.001   0.008</span></span>
 <span id="cb8-22"><a href="#cb8-22" tabindex="-1"></a>mod_partial <span class="ot">=</span> <span class="fu">report</span>(obj_partial)</span></code></pre></div>
 <p>The estimated regression coefficients for the transition
 probabilities and the shared state-dependent parameters:</p>
@@ -681,7 +681,7 @@ likelihood as a function of the fixed-effect parameters
 <span id="cb12-18"><a href="#cb12-18" tabindex="-1"></a>  opt_re <span class="ot">&lt;-</span> <span class="fu">nlminb</span>(obj_re<span class="sc">$</span>par, obj_re<span class="sc">$</span>fn, obj_re<span class="sc">$</span>gr)</span>
 <span id="cb12-19"><a href="#cb12-19" tabindex="-1"></a>)</span>
 <span id="cb12-20"><a href="#cb12-20" tabindex="-1"></a><span class="co">#&gt;    user  system elapsed </span></span>
-<span id="cb12-21"><a href="#cb12-21" tabindex="-1"></a><span class="co">#&gt;   1.176   0.029   1.211</span></span>
+<span id="cb12-21"><a href="#cb12-21" tabindex="-1"></a><span class="co">#&gt;   1.148   0.040   1.195</span></span>
 <span id="cb12-22"><a href="#cb12-22" tabindex="-1"></a>mod_re <span class="ot">=</span> <span class="fu">report</span>(obj_re)</span></code></pre></div>
 <p>The estimated standard deviations of the random effects tell us how
 much the transition probabilities vary across individuals. We can check
