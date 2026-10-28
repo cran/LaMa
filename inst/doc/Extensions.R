@@ -54,7 +54,29 @@ dat = list(
 # Fitting the model
 obj_multi = MakeADFun(nll_multi, par, silent = TRUE)
 opt_multi = nlminb(obj_multi$par, obj_multi$fn, obj_multi$gr)
-mod_multi = report(obj_multi) # reporting from fitted model
+mod_multi = lama(obj_multi) # reporting from fitted model
+
+## ----statedens----------------------------------------------------------------
+nll_multi2 = function(par) {
+  getAll(par, dat)
+  Gamma = tpm(eta)
+  delta = stationary(Gamma)
+  mu = exp(log_mu); REPORT(mu)
+  sigma = exp(log_sigma); REPORT(sigma)
+  kappa = exp(log_kappa); REPORT(kappa)
+  allprobs = statedens(step, dgamma2, mu, sigma) * statedens(angle, dvm, 0, kappa)
+  -forward(delta, Gamma, allprobs)
+}
+
+obj_multi2 = MakeADFun(nll_multi2, par, silent = TRUE)
+opt_multi2 = nlminb(obj_multi2$par, obj_multi2$fn, obj_multi2$gr)
+
+## ----statedens llk------------------------------------------------------------
+c(-opt_multi$objective, -opt_multi2$objective)
+
+## ----statedens plot, fig.width = 8, fig.height = 4----------------------------
+mod_multi2 = lama(obj_multi2)
+plot(mod_multi2, type = "statedens")
 
 ## ----state dist multi, fig.width = 8, fig.height = 4--------------------------
 # extracting estimated parameters
@@ -84,6 +106,9 @@ for(j in 1:2) curve(delta[j] * dvm(x, 0, kappa[j]), lwd = 2, add = TRUE, col = c
 curve(delta[1] * dvm(x, 0, kappa[1]) + delta[2] * dvm(x, 0, kappa[2]), 
       lwd = 2, lty = 2, add = TRUE)
 par(oldpar)
+
+## ----pres multi, fig.width = 8, fig.height = 6--------------------------------
+plot(mod_multi)
 
 ## ----parameters---------------------------------------------------------------
 # parameters
@@ -160,7 +185,7 @@ obj_cov = MakeADFun(nll_cov, par, silent = TRUE)
 system.time(
   opt <- nlminb(obj_cov$par, obj_cov$fn, obj_cov$gr)
 )
-mod_cov <- report(obj_cov) # reporting from fitted model
+mod_cov <- lama(obj_cov) # reporting from fitted model
 
 ## ----mod_cov_densities--------------------------------------------------------
 mod_cov$states = viterbi(mod = mod_cov)
@@ -276,7 +301,7 @@ dat = list(
 obj_msr = MakeADFun(nll_msr, par, silent = TRUE)
 opt_msr = nlminb(obj_msr$par, obj_msr$fn, obj_msr$gr)
 
-mod_msr = report(obj_msr)
+mod_msr = lama(obj_msr)
 
 ## ----visualization3-----------------------------------------------------------
 Gamma_hat_reg = mod_msr$Gamma
@@ -319,7 +344,7 @@ dat = list(
 nll_seas = function(par) {
   getAll(par, dat)
   Gamma = tpm(beta, Z_tod)
-  Delta = stationary_p(Gamma) # periodically stationary distribution
+  Delta = stationary_p(Gamma)[c(2:24, 1), ] # periodically stationary distribution, row k for tod k
   ADREPORT(Delta)
   # Parameter transformations for strictly positive parameters
   mu = exp(log_mu); REPORT(mu)
@@ -330,14 +355,14 @@ nll_seas = function(par) {
   for(j in 1:N){
     allprobs[ind,j] = dgamma2(step[ind], mu[j], sigma[j])
   }
-  -forward(Delta[tod[1],], Gamma[,,tod], allprobs)
+  -forward(Delta[tod[1],], Gamma, allprobs, tod = tod)
 }
 
 ## ----seasonal fit-------------------------------------------------------------
 obj_seas = MakeADFun(nll_seas, par, silent = TRUE)
 opt_seas = nlminb(obj_seas$par, obj_seas$fn, obj_seas$gr)
 sdr_seas = sdreport(obj_seas)
-mod_seas = report(obj_seas)
+mod_seas = lama(obj_seas)
 
 ## ----p stationary-------------------------------------------------------------
 Delta = as.list(sdr_seas, "Est", report = TRUE)$Delta

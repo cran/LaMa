@@ -5,7 +5,7 @@
 #'
 #' Builds a design matrix of \code{sin}/\code{cos} pairs for use in models
 #' with periodic predictors. Can be used directly or inside formulas passed
-#' to \code{make_matrices} (where expansion is handled automatically).
+#' to \code{modmat} (where expansion is handled automatically).
 #'
 #' The resulting columns form the basis for linear predictors of the form
 #' \deqn{
@@ -29,7 +29,7 @@
 #' ## In model formulas (expand_cosinor handles the expansion):
 #' form <- ~ x + temp * cosinor(hour, c(24, 12))
 #' data <- data.frame(x = runif(24), temp = rnorm(24, 20), hour = 1:24)
-#' modmat <- make_matrices(form, data = data)
+#' modmat <- modmat(form, data = data)
 cosinor <- function(x, period = 24) {
   xname <- deparse(substitute(x))
   out   <- matrix(NA_real_, nrow = length(x), ncol = 0)
@@ -44,127 +44,73 @@ cosinor <- function(x, period = 24) {
   out
 }
 
-#' Build the design and the penalty matrix for models involving penalised splines based on a formula and a data set
-#'
-#' @param formula right side of a formula as used in \code{mgcv}
-#' @param data data frame containing the variables in the formula
-#' @param knots optional list containing user specified knot values to be used for basis construction
-#' 
-#' For most bases the user simply supplies the \code{knots} to be used, which must match up with the \code{k} value supplied (note that the number of knots is not always just \code{k}).
-#' See \code{mgcv} documentation for more details.
-#'
-#' @return a list containing the design matrix \code{Z}, a (potentially nested) list of penalty matrices \code{S}, the \code{formula}, the \code{data}, the \code{knots}, and the original \code{mod} object returned by \code{mgcv}.
-#' Note that for tensorproduct smooths, the corresponding list entry is itself a list, containing the d marginal penalty matrices if d is the dimension of the tensor product.
-#' @export
-#' 
-#' @importFrom mgcv gam s
-#' @importFrom stats update
-#'
-#' @examples
-#' data = data.frame(x = runif(100), 
-#'                   y = runif(100),
-#'                   g = factor(rep(1:10, each = 10)))
-#'
-#' # unvariate thin plate regression spline
-#' modmat = make_matrices(~ s(x), data)
-#' # univariate P-spline
-#' modmat = make_matrices(~ s(x, bs = "ps"), data)
-#' # adding random intercept
-#' modmat = make_matrices(~ s(g, bs = "re") + s(x, bs = "ps"), data)
-#' # tensorproduct of x and y
-#' modmat = make_matrices(~ s(x) + s(y) + ti(x,y), data)
-make_matrices_old = function(formula, 
-                         data, 
-                         knots = NULL
-                         ){
-  
-  ## Potenially expand cosinor terms
-  formula = expand_cosinor(formula)
-  
-  ## setting up the model using mgcv
-  gam_setup = gam(formula = update(formula, dummy ~ .),
-                  data = cbind(dummy = 1, data), 
-                  knots = knots,
-                  fit = FALSE)
-  
-  ## assiging design matrix
-  term_names = gam_setup$term.names
-  Z = gam_setup$X
-  colnames(Z) = term_names
-
-  ## dealing with the penalty matrices
-  term_labels = sapply(gam_setup$smooth, function(x) x$label)
-  
-  # second option: tensorproduct -> save blown-up marginal penalty matrices (with constraints baked in)
-  S = list()
-  counter = 1
-  for(i in seq_along(gam_setup$smooth)){
-    sm = gam_setup$smooth[[i]]
-    if(is.null(sm$margin)){
-      S[[i]] = gam_setup$S[[counter]]
-      counter = counter + 1
-    } else{
-      nPenMat = length(sm$margin)
-      S_sublist = gam_setup$S[counter:(counter + nPenMat - 1)]
-      margin_names = sapply(sm$margin, function(y) y$term)
-      names(S_sublist) = margin_names
-      S[[i]] = S_sublist
-      counter = counter + nPenMat
-    }
-  }
-  names(S) = term_labels
-  
-  pardim <- list(fixed_eff = gam_setup$nsdf)
-  
-  pardim_smooth = sapply(S, function(x){
-    if(is.matrix(x)){
-      return(nrow(x))
-    } else{
-      return(nrow(x[[1]]))
-    }
-  })
-  
-  pardim = c(pardim, pardim_smooth)
-  
-  out = list(Z = Z, 
-             S = S, 
-             # S2 = S2,
-             pardim = pardim,
-             formula = gam_setup$formula, 
-             data = data, 
-             knots = knots,
-             gam = gam_setup)
-  
+## the shape of a LaMa_matrices object, in one place
+new_LaMa_matrices <- function(Z, S, pardim, coef, sp0, formula, data, gam, gam0, knots) {
+  out <- list(Z = Z, S = S, pardim = pardim, coef = coef, sp0 = sp0,
+              formula = formula, data = data, gam = gam, gam0 = gam0, knots = knots)
   class(out) <- "LaMa_matrices"
-  return(out)
+  out
+}
+
+## combine per-component results into one object. Z, pardim, gam, gam0 and knots
+## stay per component; S and coef are flattened, because the fitting code wants a
+## single flat list of penalty matrices. 'prefix' qualifies their names with the
+## component name, which is what distinguishes a nested formula list from a flat one.
+combine_LaMa_matrices <- function(res, data, prefix = FALSE) {
+  # drop NULL entries, e.g. knots when none were supplied
+  per <- function(what) {
+    v <- lapply(res, `[[`, what)
+    keep <- !vapply(v, is.null, TRUE)
+    if(any(keep)) v[keep] else list()
+  }
+  # c() qualifies the names by the component name, wanted only with 'prefix'
+  flat <- function(what) do.call(c, if(prefix) per(what) else unname(per(what)))
+
+  new_LaMa_matrices(Z = per("Z"), S = flat("S"), pardim = per("pardim"),
+                    coef = flat("coef"), sp0 = flat("sp0"),
+                    formula = per("formula"), data = data,
+                    gam = per("gam"), gam0 = per("gam0"), knots = per("knots"))
+}
+
+## response variable of a formula, used to name its block. NULL for a right-side
+## only formula, unless an index is given to fall back on
+get_name <- function(fml, idx = NULL) {
+  if(length(fml) == 3 && !deparse(fml[[2]]) %in% c("", ".")) deparse(fml[[2]])
+  else if(!is.null(idx)) paste0("par", idx)
+  else NULL
 }
 
 make_matrices_flat <- function(formula, data, knots = NULL) {
   
-  get_name <- function(fml, idx) {
-    if (length(fml) == 3 && !deparse(fml[[2]]) %in% c("", ".")) {
-      deparse(fml[[2]])
-    } else {
-      paste0("par", idx)
-    }
-  }
-  
   process_single <- function(fml, name, knots_sub) {
+    fml_given <- fml # as the user wrote it, for print()
     fml <- expand_cosinor(fml)
     
     # prepare gam model setup
     gam_setup <- gam(update(fml, dummy ~ .), data = cbind(dummy = 1, data), 
                    knots = knots_sub, fit = FALSE)
     
-    # also prepare prediction gam
-    gam_setup0 <- gam(update(fml, dummy ~ .), data = cbind(dummy = 1, data), 
-                   knots = knots_sub, control = list(maxit = 1))
+    # also prepare prediction gam, only ever used by predict.gam() to build
+    # prediction design matrices. gam(G = ) reuses the setup above instead of
+    # constructing the whole basis a second time
+    gam_setup0 <- gam(G = gam_setup, control = list(maxit = 1))
     
     Z <- gam_setup$X
     colnames(Z) <- gam_setup$term.names
+    # right side as a string, reported by tpm() for summary()
+    attr(Z, "formula") <- paste("~", gsub("\\s+", " ", paste(deparse(fml_given[[length(fml_given)]]), collapse = " ")))
+    gam_setup$X <- NULL # returned as Z, and a second copy is the largest thing here
     
+    # mgcv's initial guesses, one per penalty matrix and in the same order as
+    # gam_setup$S, so the loop below can name them as it walks the smooths
+    sp_init <- initial.sp(Z, gam_setup$S, gam_setup$off)
+    # started well above mgcv's guess, as the inner fits are better behaved when
+    # constrained initially; capped for terms with a large covariate scale
+    sp_init <- pmin(100 * sp_init, 1e6)
+
     S <- list()
     coef <- list()
+    sp0 <- numeric(0)
     pardim <- list(fixed_eff = gam_setup$nsdf)
     counter <- 1
     
@@ -175,53 +121,45 @@ make_matrices_flat <- function(formula, data, knots = NULL) {
       } else {
         label <- paste0(name, ".", sm$label)
       }
-      
-      if (is.null(sm$margin)) {
+      if(length(sm$S) == 0){
+        stop("'", sm$label, "' is unpenalised (e.g. fx = TRUE), which is not supported.")
+      }
+
+      if (length(sm$S) == 1) {
         # Single-penalty smooth
         S[[label]] <- gam_setup$S[[counter]]
         pardim[[sm$label]] <- nrow(S[[label]])
         coef[[label]] <- rep(0, nrow(S[[label]]))
+        sp0[label] <- sp_init[counter]
         counter <- counter + 1
       } else {
-        # Tensor product smooth
-        n_pen <- length(sm$margin)
-        margin_names <- sapply(sm$margin, `[[`, "term")
+        # several penalties: one per margin for a tensor product, but also e.g. bs = "fs"
+        n_pen <- length(sm$S)
+        margin_names <- if(length(sm$margin) == n_pen) {
+          vapply(sm$margin, function(m) paste(m$term, collapse = ","), "") # "x,y" for a 2-d margin
+        } else seq_len(n_pen)
         penalty_list <- gam_setup$S[counter:(counter + n_pen - 1)]
         names(penalty_list) <- margin_names
         S[[label]] <- penalty_list
         pardim[[sm$label]] <- nrow(penalty_list[[1]])
         coef[[label]] <- rep(0, nrow(penalty_list[[1]]))
+        # one per margin, named <smooth>.<margin> to mirror the sub-list in S
+        sp0[paste0(label, ".", margin_names)] <- sp_init[counter:(counter + n_pen - 1)]
         counter <- counter + n_pen
       }
     }
     
-    coef_fixed <- rep(0, gam_setup$nsdf)
-    names(coef_fixed) <- colnames(Z)[seq_len(gam_setup$nsdf)]
-    # coef <- c(setNames(list(coef_fixed), paste0(name, ".fixed_eff")), coef)
-    
     list(
       Z = Z, S = S, pardim = pardim,
       gam = gam_setup, gam0 = gam_setup0,
-      knots = knots_sub, coef = coef
+      knots = knots_sub, coef = coef, sp0 = sp0, formula = fml_given
     )
   }
   
   if (!inherits(formula, "list")) {
-    name <- get_name(formula, 1)
-    if(name == "par1"){
-      name <- NULL # default name for single formula
-    }
-    res <- process_single(formula, name, knots)
-    out <- list(
-      Z = res$Z, S = res$S, 
-      pardim = res$pardim,
-      coef = res$coef,
-      data = data, 
-      gam = res$gam, gam0 = res$gam0,
-      knots = knots
-    )
-    class(out) <- "LaMa_matrices"
-    return(out)
+    res <- process_single(formula, get_name(formula), knots) # NULL name -> unprefixed labels
+    return(new_LaMa_matrices(res$Z, res$S, res$pardim, res$coef, res$sp0,
+                             res$formula, data, res$gam, res$gam0, knots))
   }
   
   # get names
@@ -237,42 +175,11 @@ make_matrices_flat <- function(formula, data, knots = NULL) {
     }
   }
   
-  # Case: list of formulas
-  Z_list <- list()
-  S_flat <- list()
-  pardim_list <- list()
-  formula_list <- list()
-  knots_list <- list()
-  gam_list <- list()
-  gam0_list <- list()
-  coef_list <- list()
-  
-  # formula_names <- names(formula)
-  
-  for (i in seq_along(formula)) {
-    fml <- formula[[i]]
-    name <- form_names[i]
-    res <- process_single(fml, name, knots[[name]])
-    
-    Z_list[[name]] <- res$Z
-    S_flat <- c(S_flat, res$S)
-    pardim_list[[name]] <- res$pardim
-    knots_list[[name]] <- res$knots
-    gam_list[[name]] <- res$gam
-    gam0_list[[name]] <- res$gam0
-    coef_list <- c(coef_list, res$coef)
-  }
-  
-  out <- list(
-    Z = Z_list, S = S_flat, 
-    pardim = pardim_list,
-    coef = coef_list,
-    data = data,
-    gam = gam_list, gam0 = gam0_list,
-    knots = knots_list
-  )
-  class(out) <- "LaMa_matrices"
-  return(out)
+  # a list of formulas: the labels are already prefixed by process_single()
+  res <- lapply(seq_along(formula), function(i)
+    process_single(formula[[i]], form_names[i], knots[[form_names[i]]]))
+  names(res) <- form_names
+  combine_LaMa_matrices(res, data)
 }
 
 #' Build the design and the penalty matrix for models involving penalised splines based on a formula and a data set
@@ -289,19 +196,28 @@ make_matrices_flat <- function(formula, data, knots = NULL) {
 #' 
 #' @seealso \code{\link{predict.LaMa_matrices}} for prediction design matrix construction based on the model matrices object created by this function.
 #'
+#' @details \code{make_matrices()} is the former name of \code{modmat()} and still works.
+#'
 #' @return a list of class \code{LaMa_matrices} containing:
 #' \item{\code{Z}}{design matrix (or list of such matrices if \code{formula} is a list))}
 #' \item{\code{S}}{list of penalty matrices (with names based on the response terms of the formulas as well as the smooth terms and covariates). For tensorproduct smooths, corresponding entries are themselves lists, containing the \eqn{d} marginal penalty matrices if \eqn{d} is the dimension of the tensor product)}
 #' \item{\code{pardim}}{list of parameter dimensions (fixed and penalised separately) for each formula, for ease of setting up initial parameters}
 #' \item{\code{coef}}{list of coefficient vectors filled with zeros of the correct length for each formula, for ease of setting up initial parameters}
+#' \item{\code{sp0}}{named vector of \strong{initial penalty strengths}, with one entry per penalty matrix and names matching \code{S} (a smooth with several penalties, e.g. a tensor product, contributes one entry each, named \code{<smooth>.<margin>}).
+#'
+#' These are \code{\link[mgcv]{initial.sp}}'s guesses times 100, capped at \code{1e6}: the inner optimisation is better behaved when it starts constrained, and the outer iteration relaxes the penalty from there.
+#'
+#' It can be passed straight to \code{\link{penalty}} or \code{\link{penalty2}} when each smooth appears once. 
+#' When a smooth is replicated, e.g. one spline per state, use \code{\link{rep_sp}}, as a single \code{rep()} over \code{sp0} is only correct for some models.}
+#' \item{\code{formula}}{the formula(s) as supplied, in the same nesting as \code{Z}}
 #' \item{\code{data}}{the data frame used for the model(s)}
-#' \item{\code{gam}}{unfitted \code{mgcv::gam} object used for construction of \code{Z} and \code{S} (or list of such objects if \code{formula} is a list)}
+#' \item{\code{gam}}{unfitted \code{mgcv::gam} object used for construction of \code{Z} and \code{S} (or list of such objects if \code{formula} is a list). Its \code{X} element is not kept, as it is returned as \code{Z}}
 #' \item{\code{gam0}}{fitted \code{mgcv::gam} which is used internally to create prediction design matrices (or list of such objects if \code{formula} is a list)}
 #' \item{\code{knots}}{knot list used in the basis construction (or named list over such lists if \code{formula} is a list)}
 #'
 #' @export
 #' 
-#' @importFrom mgcv gam s
+#' @importFrom mgcv gam s initial.sp
 #' @importFrom stats update
 #'
 #' @examples
@@ -310,110 +226,144 @@ make_matrices_flat <- function(formula, data, knots = NULL) {
 #'                   g = factor(rep(1:10, each = 10)))
 #'
 #' # unvariate thin plate regression spline
-#' modmat = make_matrices(~ s(x), data)
+#' modmat = modmat(~ s(x), data)
 #' # univariate P-spline
-#' modmat = make_matrices(~ s(x, bs = "ps"), data)
+#' modmat = modmat(~ s(x, bs = "ps"), data)
 #' # adding random intercept
-#' modmat = make_matrices(~ s(g, bs = "re") + s(x, bs = "ps"), data)
+#' modmat = modmat(~ s(g, bs = "re") + s(x, bs = "ps"), data)
 #' # tensorproduct of x and y
-#' modmat = make_matrices(~ s(x) + s(y) + ti(x,y), data)
+#' modmat = modmat(~ s(x) + s(y) + ti(x,y), data)
 #' # multiple formulas at once
-#' modmat = make_matrices(list(mu ~ s(x) + y, sigma ~ s(g, bs = "re")), data = data)
-make_matrices <- function(formula, data, knots = NULL){
-  if(!is.list(formula)){
-    # not a list -> check if formula is a single formula
-    if(inherits(formula, "formula")){
-      # check knots
-      return(make_matrices_flat(formula, data, knots))
-    } else{
-      stop("'formula' must be a (nested) list of formulas or a single formula.")
-    }
-  } else if(all(sapply(formula, inherits, what = "formula"))){     # check if flat list
-    # check knots
-    if(!is.null(knots)){
-      if(!is.list(knots)){
-        stop("'knots' must be a list of knots for each formula in 'formula'.")
-      } else if(!all(sapply(knots, is.list))){
-        stop("'knots' must be a named list of knot lists, containing knots for the corresponding formula (top level) and variable (bottom level) in 'formula'.")
-      }
-    }
-    return(make_matrices_flat(formula, data, knots))
-  } else{
-    # check if two level list
-    nested_check <- all(sapply(formula, function(f){
-      all(sapply(f, inherits, what = "formula"))
-    }))
-    
-    if(nested_check){
-      Z_list <- list()
-      S_list <- list()
-      pardim_list <- list()
-      coef_list <- list()
-      gam_list <- list()
-      gam0_list <- list()
-      knots_list <- list()
-      
-      names <- names(formula)
-      if(is.null(names)){
-        names <- paste0("stream", seq_along(formula))
-      }
-      
-      for(i in seq_along(formula)){
-        thisname <- names[i]
-        res <- make_matrices_flat(formula[[i]], data, knots[[i]])
-        
-        # handle nameing of S and coef
-        if(length(res$S) > 0){
-          names(res$S) <- paste0(thisname, ".", names(res$S))
-        }
-        names(res$coef) <- paste0(thisname, ".", names(res$coef))
-        
-        Z_list[[thisname]] <- res$Z
-        S_list <- c(S_list, res$S)
-        pardim_list[[thisname]] <- res$pardim
-        coef_list <- c(coef_list, res$coef)
-        gam_list[[thisname]] <- res$gam
-        gam0_list[[thisname]] <- res$gam0
-        knots_list[[thisname]] <- res$knots
-      }
-      
-      out <- list(
-        Z = Z_list, 
-        S = S_list, 
-        pardim = pardim_list,
-        coef = coef_list,
-        data = data,
-        gam = gam_list, 
-        gam0 = gam0_list,
-        knots = knots_list
-      )
-      class(out) <- "LaMa_matrices"
-      return(out)
-    } else{
-      stop("'formula' must be a (nested) list of formulas or a single formula.")
+#' modmat = modmat(list(mu ~ s(x) + y, sigma ~ s(g, bs = "re")), data = data)
+modmat <- function(formula, data, knots = NULL){
+  ## 0 = a single formula, 1 = a list of formulas, 2 = a list of such lists
+  is_formula_list <- function(x){
+    is.list(x) && length(x) > 0 && all(vapply(x, inherits, TRUE, what = "formula"))
+  }
+  depth <- if(inherits(formula, "formula")) 0L
+           else if(is_formula_list(formula)) 1L
+           else if(is.list(formula) && length(formula) > 0 &&
+                   all(vapply(formula, is_formula_list, TRUE))) 2L
+           else stop("'formula' must be a (nested) list of formulas or a single formula.")
+
+  if(depth == 2L){
+    names_out <- names(formula)
+    if(is.null(names_out)) names_out <- paste0("stream", seq_along(formula))
+    res <- lapply(seq_along(formula),
+                  function(i) make_matrices_flat(formula[[i]], data, knots[[i]]))
+    names(res) <- names_out
+    # prefix: S and coef of every stream are qualified by the stream name
+    return(combine_LaMa_matrices(res, data, prefix = TRUE))
+  }
+
+  if(depth == 1L && !is.null(knots)){
+    if(!is.list(knots)){
+      stop("'knots' must be a list of knots for each formula in 'formula'.")
+    } else if(!all(sapply(knots, is.list))){
+      stop("'knots' must be a named list of knot lists, containing knots for the corresponding formula (top level) and variable (bottom level) in 'formula'.")
     }
   }
+  make_matrices_flat(formula, data, knots)
 }
 
-# process_obs_formulas <- function(formulas, 
-#                                  dists,
-#                                  nStates){
-# 
-#   # get dists
-#   dist_fns <- lapply(dists, function(d){
-#     if(is.character("d")){
-#       get(paste0("d", d))
-#     } else if(is.function(d)){
-#       d
-#     }
-#   })
-#   # for each dist, find parameter names of dist
-#   parnames <- lapply(dist_fns, function(d) formals(d)[-1])
-#   
-#   
-#   # create nested named formula list with streami.par.i ~ 1 for all by default
-#   # match with provided formulas
-# }
+# former name, still works
+#' @rdname modmat
+#' @export
+make_matrices <- modmat
+
+#' Repeat initial penalty strengths for replicated smooths
+#'
+#' @description
+#' Expands the \code{sp0} element of a \code{\link{modmat}} object into a
+#' \code{sp} vector for \code{\link{penalty}} or \code{\link{penalty2}}, when each smooth is
+#' used more than once, for example one spline per state or per off-diagonal element of the
+#' transition probability matrix.
+#'
+#' @details
+#' \code{sp} runs over replicates \strong{within} each smooth, so for a tensor product the
+#' margins vary fastest. A single \code{rep()} over \code{sp0} therefore only gives the right
+#' answer for some models, silently producing the right length but the wrong values for others.
+#' This function repeats each smooth's penalty strengths separately, which is always correct.
+#'
+#' @param model_matrices object of class \code{LaMa_matrices} as returned by \code{\link{modmat}}
+#' @param N number of replicates. Either a single number used for every smooth, or one number per
+#' smooth, i.e. per element of \code{model_matrices$S}
+#'
+#' @return named numeric vector of initial penalty strengths, of the length and in the order
+#' expected for \code{sp}
+#'
+#' @seealso \code{\link{modmat}}, which computes \code{sp0}
+#' @export
+#'
+#' @examples
+#' modmat = modmat(~ s(x) + ti(x, y), data.frame(x = runif(100), y = runif(100)))
+#' modmat$sp0         # one value per penalty
+#' rep_sp(modmat, 2)  # ready to use as 'sp' for two replicates of each smooth
+rep_sp <- function(model_matrices, N) {
+  if(!inherits(model_matrices, "LaMa_matrices")){
+    stop("'model_matrices' needs to be an object returned by 'modmat()'")
+  }
+  sp0 <- model_matrices$sp0
+  n_pen <- vapply(model_matrices$S, function(s) if(is.matrix(s)) 1L else length(s), 1L)
+  if(length(n_pen) == 0) return(numeric(0))
+  if(length(N) == 1) N <- rep(N, length(n_pen))
+  if(length(N) != length(n_pen)){
+    stop("'N' needs to be a single number or one number per smooth, i.e. of length ",
+         length(n_pen))
+  }
+  if(any(N < 1) || any(N != round(N))) stop("'N' needs to contain positive whole numbers")
+
+  grp <- rep(seq_along(n_pen), n_pen) # which smooth each penalty belongs to
+  # unnamed list, so that unlist() does not qualify the names a second time
+  unlist(lapply(seq_along(n_pen), function(i) {
+    v <- sp0[grp == i]
+    stats::setNames(rep(v, times = N[i]),
+                    paste0(names(v), ".", rep(seq_len(N[i]), each = length(v))))
+  }))
+}
+
+
+#' Print a \code{LaMa_matrices} object
+#'
+#' @param x object of class \code{LaMa_matrices} as returned by \code{\link{modmat}}
+#' @param ... ignored
+#'
+#' @return \code{x}, invisibly. Called for its side effect of printing.
+#'
+#' @seealso \code{\link{modmat}}
+#' @export
+print.LaMa_matrices <- function(x, ...) {
+  # one line per formula, named as in the rest of the object, tildes lined up
+  show <- function(f, nms, pad, width) {
+    rhs <- vapply(f, function(g) paste(deparse(g[[length(g)]]), collapse = " "), "")
+    lhs <- if(is.null(nms)) "" else paste0(formatC(nms, width = width, flag = "-"), " ")
+    cat(paste0(pad, lhs, "~ ", gsub("\\s+", " ", rhs), "\n"), sep = "")
+  }
+  f <- x$formula
+  cat("Model matrices for\n\n")
+  if(inherits(f, "formula")){
+    show(list(f), get_name(f), "  ", 0)
+  } else if(inherits(f[[1]], "formula")){
+    show(f, names(f), "  ", max(nchar(names(f))))
+  } else { # one entry per data stream
+    width <- max(0, nchar(unlist(lapply(f, names))))
+    for(s in names(f)){
+      cat("  ", s, "\n", sep = "")
+      show(f[[s]], names(f[[s]]), "    ", width)
+    }
+  }
+
+  cat("\n---\n\n")
+  if(length(x$sp0) == 0){
+    cat("No penalised terms, so no initial penalty strengths.\n")
+  } else {
+    cat("Initial penalty strengths:\n\n")
+    print(signif(x$sp0, 4))
+    cat("\nUse 'rep_sp()' if a smooth is used more than once.\n")
+  }
+  invisible(x)
+}
+
 
 #' Process and standardise formulas for the state process of hidden Markov models
 #'
@@ -560,107 +510,68 @@ process_hid_formulas <- function(formulas,
 
 
 
-#' Build the prediction design matrix based on new data and model_matrices object created by \code{\link{make_matrices}}
+#' Build the prediction design matrix based on new data and model_matrices object created by \code{\link{modmat}}
 #'
-#' @param object model matrices object as returned from \code{\link{make_matrices}}
+#' @param object model matrices object as returned from \code{\link{modmat}}
 #' @param newdata data frame containing the variables in the formula and new data for which to evaluate the basis
 #' @param what optional character string specifying which formula to use for prediction if \code{object} contains multiple formulas.
+#' @param exclude optional vector of terms to set to zero in the predicted design matrix. Useful for predicting main effects only when e.g. \code{s(..., bs = "re")} terms are present. See \code{mgcv::predict.gam} for more details.
 #' @param ... for method consistency only
 #'
-#' @seealso \code{\link{make_matrices}} for creating objects of class \code{LaMa_matrices} which can be used for prediction by this function.
+#' @seealso \code{\link{modmat}} for creating objects of class \code{LaMa_matrices} which can be used for prediction by this function.
 #'
-#' @return prediction design matrix for \code{newdata} with the same basis as used for \code{model_matrices}
+#' @return prediction design matrix for \code{newdata} with the same basis as used for \code{object}
 #' @export
 #' 
 #'
 #' @examples
 #' # single formula
-#' modmat = make_matrices(~ s(x), data.frame(x = 1:10))
+#' modmat = modmat(~ s(x), data.frame(x = 1:10))
 #' Z_p = predict(modmat, data.frame(x = 1:10 - 0.5))
 #' # with multiple formulas
-#' modmat = make_matrices(list(mu ~ s(x), sigma ~ s(x, bs = "ps")), data = data.frame(x = 1:10))
+#' modmat = modmat(list(mu ~ s(x), sigma ~ s(x, bs = "ps")), data = data.frame(x = 1:10))
 #' Z_p = predict(modmat, data.frame(x = 1:10 - 0.5), what = "mu")
 #' # nested formula list
 #' form = list(stream1 = list(mu ~ s(x), sigma ~ s(x, bs = "ps")))
-#' modmat = make_matrices(form, data = data.frame(x = 1:10))
+#' modmat = modmat(form, data = data.frame(x = 1:10))
 #' Z_p = predict(modmat, data.frame(x = 1:10 - 0.5), what = c("stream1", "mu"))
-predict.LaMa_matrices <- function(object, newdata, what = NULL, ...){
-  # dots <- list(...)
-  # if(!is.null(dots$newdata)){
-  #   newdata <- dots$newdata
-  # } else{
-  #   newdata <- dots[[1]]
-  # }
-  
-  pred_matrix(object, newdata = newdata, what = what)
-}
-
-
-#' Build the prediction design matrix based on new data and model_matrices object created by \code{\link{make_matrices}}
-#'
-#' @param model_matrices model_matrices object as returned from \code{\link{make_matrices}}
-#' @param newdata data frame containing the variables in the formula and new data for which to evaluate the basis
-#' @param what optional character string specifying which formula to use for prediction, if \code{object} contains multiple formulas. If \code{NULL}, the first formula is used.
-#' @param exclude optional vector of terms to set to zero in the predicted design matrix. Useful for predicting main effects only when e.g. \code{sd(..., bs = "re")} terms are present. See \code{mgcv::predict.gam} for more details.
-#' @return prediction design matrix for \code{newdata} with the same basis as used for \code{model_matrices}
-#' @export
-#' 
 #' @importFrom mgcv gam
 #' @importFrom mgcv s
 #' @importFrom mgcv predict.gam
-#'
-#' @examples
-#' # single formula
-#' modmat = make_matrices(~ s(x), data.frame(x = 1:10))
-#' Z_p = pred_matrix(modmat, data.frame(x = 1:10 - 0.5))
-#' # with multiple formulas
-#' modmat = make_matrices(list(mu ~ s(x), sigma ~ s(x, bs = "ps")), data = data.frame(x = 1:10))
-#' Z_p = pred_matrix(modmat, data.frame(x = 1:10 - 0.5), what = "mu")
-#' # nested formula list
-#' form = list(stream1 = list(mu ~ s(x), sigma ~ s(x, bs = "ps")))
-#' modmat = make_matrices(form, data = data.frame(x = 1:10))
-#' Z_p = pred_matrix(modmat, data.frame(x = 1:10 - 0.5), what = c("stream1", "mu"))
-pred_matrix = function(model_matrices, 
-                       newdata,
-                       what = NULL,
-                       exclude = NULL) {
+predict.LaMa_matrices <- function(object, newdata, what = NULL, exclude = NULL, ...){
   
-  if(is.null(model_matrices$gam0)){
-    gam_setup0 = mgcv::gam(model_matrices$formula,
-                           data = cbind(dummy = 1, model_matrices$data),
-                           knots = model_matrices$knots)
+  if(is.null(object$gam0)){
+    stop("'object' contains no 'gam0' object; rebuild it with modmat()")
   } else {
-    if(inherits(model_matrices$gam0, "gam")){
+    if(inherits(object$gam0, "gam")){
       if(!is.null(what)){
-        message("'model_matrics' only contains a single gam object, 'what' is not used.")
+        message("'object' only contains a single gam object, 'what' is not used.")
       }
-      gam_setup0 <- model_matrices$gam0
+      gam_setup0 <- object$gam0
     } else {
-      if(!inherits(model_matrices$gam0[[1]], "gam")){
+      if(!inherits(object$gam0[[1]], "gam")){ # nested list of formulas
         if(is.null(what)){
           stop("'what' must be specified and contain a top-level name of the formula list and a name/ response variable from your original formulas.")
         }
         if(length(what) != 2 | !is.character(what)){
           stop("'what' must be a character vector of length 2, containing the top-level name of the formula list and a name/ response variable from your original formulas.")
         }
-        if(!what[1] %in% names(model_matrices$gam0)){
+        if(!what[1] %in% names(object$gam0)){
           stop("'what[1]' must be a top-level name of your formula list.")
         }
-        if(!what[2] %in% names(model_matrices$gam0[[what[1]]])){
+        if(!what[2] %in% names(object$gam0[[what[1]]])){
           stop("'what[2]' must be one of the names/ response variables of your original formulas.")
         }
-        gam_setup0 <- model_matrices$gam0[[what[1]]][[what[2]]]
-      } else {
+        gam_setup0 <- object$gam0[[what[1]]][[what[2]]]
+      } else { # flat list of formulas
         if(is.null(what)){
           stop("'what' must be specified and be one of the names/ response variables from your original formulas.")
-          # what <- names(model_matrices$Z)[1]
         }
-        if(!what %in% names(model_matrices$gam0)){
+        if(!what %in% names(object$gam0)){
           stop("'what' must be one of the names of your original formulas.")
         }
+        gam_setup0 <- object$gam0[[what]]
       }
-      
-      gam_setup0 <- model_matrices$gam0[[what]]
     }
   }
   
@@ -675,31 +586,61 @@ pred_matrix = function(model_matrices,
               exclude = exclude)
 }
 
+#' Build the prediction design matrix based on new data and model_matrices object created by \code{\link{modmat}}
+#'
+#' @description
+#' \strong{Deprecated.} Use \code{\link[=predict.LaMa_matrices]{predict}} on the object returned by \code{\link{modmat}} instead, which does the same thing:
+#' \code{predict(modmat, newdata)} in place of \code{pred_matrix(modmat, newdata)}.
+#'
+#' @param model_matrices model_matrices object as returned from \code{\link{modmat}}
+#' @param newdata data frame containing the variables in the formula and new data for which to evaluate the basis
+#' @param what optional character string specifying which formula to use for prediction if \code{model_matrices} contains multiple formulas.
+#' @param exclude optional vector of terms to set to zero in the predicted design matrix. Useful for predicting main effects only when e.g. \code{sd(..., bs = "re")} terms are present. See \code{mgcv::predict.gam} for more details.
+#' @return prediction design matrix for \code{newdata} with the same basis as used for \code{model_matrices}
+#'
+#' @seealso \code{\link[=predict.LaMa_matrices]{predict}}, which replaces this function
+#' @export
+#'
+#' @examples
+#' modmat = modmat(~ s(x), data.frame(x = 1:10))
+#' # deprecated:
+#' # Z_p = pred_matrix(modmat, data.frame(x = 1:10 - 0.5))
+#' # use instead:
+#' Z_p = predict(modmat, data.frame(x = 1:10 - 0.5))
+pred_matrix = function(model_matrices, 
+                       newdata,
+                       what = NULL,
+                       exclude = NULL) {
+  .Deprecated("predict", package = "LaMa",
+              msg = paste("'pred_matrix()' is deprecated; use 'predict()' on the object",
+                          "returned by 'modmat()' instead."))
+  predict.LaMa_matrices(model_matrices, newdata = newdata, what = what, exclude = exclude)
+}
+
 
 
 ###### Density estimation setting ----------------------------------------------
 
 #' Build a standardised P-Spline design matrix and the associated P-Spline penalty matrix
-#' 
-#' This function builds the B-spline design matrix for a given data vector. 
+#'
+#' This function builds the B-spline design matrix for a given data vector.
 #' Importantly, the B-spline basis functions are normalised such that the integral of each basis function is 1, hence this basis can be used for spline-based density estimation, when the basis functions are weighted by non-negative weights summing to one.
 #'
 #' @param x data vector
 #' @param k number of basis functions
 #' @param type type of the data, either \code{"real"} for data on the reals, \code{"positive"} for data on the positive reals or \code{"circular"} for circular data like angles.
 #' @param degree degree of the B-spline basis functions, defaults to cubic B-splines
-#' @param knots optional vector of knots (including the boundary knots) to be used for basis construction. 
+#' @param knots optional vector of knots (including the boundary knots) to be used for basis construction.
 #' If not provided, the knots are placed equidistantly for \code{"real"} and \code{"circular"} and using polynomial spacing for \code{"positive"}.
 #'
 #' For \code{"real"} and \code{"positive"} \code{k - degree + 1} knots are needed, for \code{"circular"} \code{k + 1} knots are needed.
-#' # @param quantile logical, if \code{TRUE} use quantile-based knot spacing (instead of equidistant or polynomial)
-#' @param diff_order order of differencing used for the P-Spline penalty matrix for each data stream. Defaults to second-order differences.
-#' @param pow power for polynomial knot spacing
+#' @param diff_order order of differencing used for the P-Spline penalty matrix. Defaults to second-order differences.
+#' @param pow power for polynomial knot spacing, only used for \code{type = "positive"}
 #' @param npoints number of points used in the numerical integration for normalizing the B-spline basis functions
-#' 
-#' Such non-equidistant knot spacing is only used for \code{type = "positive"}.
 #'
 #' @return list containing the design matrix \code{Z}, the penalty matrix \code{S}, the prediction design matrix \code{Z_predict}, the prediction grid \code{xseq}, and details for the basis expansion.
+#'
+#' The penalty matrix leaves out the last coefficient, which is fixed at zero for identifiability.
 #' @export
 #' @importFrom splines2 bSpline
 #' @importFrom mgcv cSplineDes
@@ -723,224 +664,82 @@ make_matrices_dens = function(x, # data vector
                               type = "real", # type of the data
                               degree = 3, # degree of the B-Spline basis
                               knots = NULL, # default to automatic knots spacing, if provided, need to be k - degree + 1
-                              # quantile = FALSE, # if TRUE, use quantile-based knots
                               diff_order = 2, # order of the differences for the penalty matrix
                               pow = 0.5, # power for polynomial knot spacing for positive values
                               npoints = 1e4 # number of points for numerical integration
 ){
-  nObs <- length(x)
-  
-  quantile <- FALSE # no quantile spacing if knots are not custom
+  type <- match.arg(type, c("real", "positive", "circular"))
 
-  if(type != "circular"){
-    
-    # getting the data range
-    rangex <- range(x, na.rm = TRUE)
-    # slightly inflating the range
-    rangex <- rangex + c(-1, 1) * diff(rangex) / 20
-    # computing the number of knots
-    nrknots <- k - degree + 1 
-    
-    if(type == "real"){ # real data, defaults to equidistant knots
-      # grid for numerical integration (normalisation)
-      # xseq <- seq(rangex[1] + 1e-3, rangex[2] - 1e-3, length = npoints)
-      
-      # if knots not supplied, default to equidistant knots
-      if(is.null(knots)){
-        if(quantile){ # quantile spacing
-          knots <- quantile(x, probs = seq(0, 1, length = nrknots), na.rm = TRUE)
-          knots[1] <- rangex[1]
-          knots[nrknots] <- rangex[2]
-        } else { # equidistant spacing
-          knots <- seq(rangex[1], rangex[2], length = nrknots)
-        }
-      } else{
-        if(length(knots) != nrknots){
-          stop("Number of knots provided is wrong. It should be 'k - degree + 1'.")
-        }
-      }
-      
-      boundary_knots <- knots[c(1, length(knots))] # set boundary knots
-      knots <- knots[2:(length(knots)-1)] # only keep interior knots
-      
-      xseq <- seq(boundary_knots[1] + 1e-3, boundary_knots[2] - 1e-3, 
-                  length = npoints)
-      
-      # numerical integration for normalizing the B-spline basis functions
-      B0 <- bSpline(
-        x = xseq, 
-        knots = knots, 
-        Boundary.knots = boundary_knots,
-        degree = degree, 
-        intercept = TRUE
-        ) # unnormalised spline design matrix
+  if(type == "circular"){
 
-      # interval width for numerical integration
-      h <- xseq[2] - xseq[1]
-      # numerical integration of each basis function
-      w <- (h * colSums(B0))^-1
-      
-      # normalising
-      B0 <- t(t(B0) * w)
-      
-      # actual data design matrix
-      B <- matrix(NA, nrow = nObs, ncol = k)
-      ind <- which(!is.na(x))
-      B[ind,] <- bSpline(
-        x = x[ind], 
-        knots = knots, 
-        Boundary.knots = boundary_knots,
-        degree = degree, 
-        intercept = TRUE
-      ) # unnormalised spline design matrix
-      
-      # normalising
-      B[ind,] <- t(t(B[ind,]) * w)
- 
-      # basis positions for initial values later (expected value of each basis function)
-      basis_pos = colSums(xseq * t(t(B0) / rowSums(t(B0))))
-      # basis_pos = knots[(degree):(length(knots)-degree+1)]
-      
-      # second-order difference matrix
-      L <- diff(diag(k), differences = diff_order)
+    x <- (x + pi) %% (2 * pi) - pi # wrap angles to [-pi, pi)
 
-    } else if(type == "positive") { # non-equidistant knots, no mass on < 0
-      
-      if(min(x, na.rm = TRUE) <= 0){
-        stop("When type = 'positive', 'x' can only contain positive values")
-      } 
-      
-      # square-root spacing
-      rangex[1] <- 0 # always from 0 to max(x)
-      
-      # grid for numerical integration (normalisation)
-      # xseq <- seq(rangex[1] + 1e-3, rangex[2] - 1e-3, length = npoints)
-      
-      # if knots not supplied, default to square-root-spaced knots
-      if(is.null(knots)){
-        if(quantile){ # quantile spacing
-          knots <- quantile(x, probs = seq(0, 1, length = nrknots), na.rm = TRUE)
-          knots[1] <- rangex[1]
-          knots[nrknots] <- rangex[2]
-        } else { # polynomial spacing
-          knots <- seq(rangex[1]^pow, rangex[2]^pow, length = nrknots)^(1/pow)
-        }
-      } else{
-        if(length(knots) != nrknots){
-          stop("Number of knots provided is wrong. It should be 'k - degree + 1'.")
-        }
-      }
-      
-      boundary_knots <- knots[c(1, length(knots))] # set boundary knots
-      knots <- knots[2:(length(knots)-1)] # only keep interior knots
-      
-      xseq <- seq(boundary_knots[1] + 1e-3, boundary_knots[2] - 1e-3, 
-                  length = npoints)
-      
-      # numerical integration for normalizing the B-spline basis functions
-      B0 <- bSpline(
-        x = xseq, 
-        knots = knots, 
-        Boundary.knots = boundary_knots,
-        degree = degree, 
-        intercept = TRUE
-      ) # unnormalised spline design matrix
-      
-      # interval width for numerical integration
-      h <- xseq[2] - xseq[1]
-      
-      # numerical integration of each basis function
-      w <- (h * colSums(B0))^-1
-      
-      # normalising
-      B0 <- t(t(B0) * w)
-      
-      # basis positions for initial values later (expected value of each basis function)
-      basis_pos <- colSums(xseq * t(t(B0) / rowSums(t(B0))))
-      
-      B <- matrix(NA, nrow = nObs, ncol = k)
-      ind <- which(!is.na(x))
-      B[ind,] <- bSpline(
-        x = x[ind], 
-        knots = knots, 
-        Boundary.knots = boundary_knots,
-        degree = degree, 
-        intercept = TRUE
-      ) # unnormalised spline design matrix
-      
-      # normalising
-      B[ind,] <- t(t(B[ind,]) * w)
-      
-      # second-order difference matrix
-      L <- diff(diag(k), differences = diff_order) 
-      
-    } else {
-      stop("type must be 'real', 'positive' or 'circular'")
-    }
-    
-  } else if(type == "circular"){
-    
     # if knots not supplied, default to equidistant knots
     if(is.null(knots)){
-      if(quantile){ # quantile spacing
-        knots <- quantile(x, probs = seq(0, 1, length = k+1), na.rm = TRUE)
-        knots[1] <- -pi
-        knots[length(knots)] <- pi
-      } else { # equidistant spacing
-        knots <- seq(-pi, pi, length = k + 1)
-      }
-    } else{
-      if(length(knots) != nrknots){
-        stop("Number of knots provided is wrong. For 'type = circular' it should be 'k + 1' with '-pi' and 'pi' as first and last entries.")
-      }
+      knots <- seq(-pi, pi, length = k + 1)
+    } else if(length(knots) != k + 1){
+      stop("Number of knots provided is wrong. For 'type = circular' it should be 'k + 1' with '-pi' and 'pi' as first and last entries.")
     }
-    
-    xseq <- seq(-pi, pi, length = npoints)
-    B0 <- cSplineDes(
-      xseq, 
-      knots, 
-      ord = degree + 1
-      )
-    
-    # interval width for numerical integration
-    h <- xseq[2] - xseq[1]
-    
-    # numerical integration of each basis function
-    w <- (h * colSums(B0))^-1
-    
-    # normalising
-    B0 <- t(t(B0) * w)
-    
-    # basis positions for initial values later (expected value of each basis function)
-    basis_pos <- colSums(xseq * t(t(B0) / rowSums(t(B0))))
-    
-    # actual data design matrix
-    B <- matrix(NA, nrow = nObs, ncol = k)
-    ind <- which(!is.na(x))
-    B[ind,] <- cSplineDes(
-      x[ind], 
-      knots, 
-      ord = degree + 1
-    )
-    # normalising
-    B[ind,] <- t(t(B[ind,]) * w)
-    
-    # difference matrix for circular P-Spline penalty
-    L <- diff(rbind(diag(k), diag(k)[1:diff_order,]), differences = diff_order)
+
+  } else {
+
+    if(type == "positive" && min(x, na.rm = TRUE) <= 0){
+      stop("When type = 'positive', 'x' can only contain positive values")
+    }
+
+    # computing the number of knots
+    nrknots <- k - degree + 1
+
+    if(is.null(knots)){
+      # slightly inflated data range
+      rangex <- range(x, na.rm = TRUE)
+      rangex <- rangex + c(-1, 1) * diff(rangex) / 20
+
+      if(type == "real"){ # equidistant knots
+        knots <- seq(rangex[1], rangex[2], length = nrknots)
+      } else { # polynomial spacing, always from 0 to max(x)
+        knots <- seq(0, rangex[2]^pow, length = nrknots)^(1/pow)
+      }
+    } else if(length(knots) != nrknots){
+      stop("Number of knots provided is wrong. It should be 'k - degree + 1'.")
+    }
   }
-  
+
+  # midpoint grid for numerical integration
+  h <- diff(range(knots)) / npoints
+  xseq <- min(knots) + (seq_len(npoints) - 0.5) * h
+
+  # numerical integration for normalizing the B-spline basis functions
+  B0 <- dens_basis(xseq, type, knots, degree) # unnormalised spline design matrix
+  w <- (h * colSums(B0))^-1
+  B0 <- t(t(B0) * w)
+
+  # basis positions for initial values later (expected value of each basis function)
+  basis_pos <- colSums(xseq * t(t(B0) / rowSums(t(B0))))
+
+  # actual data design matrix, NA rows stay NA
+  B <- matrix(NA, nrow = length(x), ncol = k)
+  ind <- which(!is.na(x))
+  B[ind,] <- t(t(dens_basis(x[ind], type, knots, degree)) * w)
+
+  # difference matrix, cyclic for circular
+  if(type == "circular"){
+    L <- diff(rbind(diag(k), diag(k)[1:diff_order,]), differences = diff_order)
+  } else{
+    L <- diff(diag(k), differences = diff_order)
+  }
+
   # constructing penalty matrix
-  S <- crossprod(L[,-k], L[,-k]) # leaving out last column because parameter set to zero
-  message("Leaving out last column of the penalty matrix, fix the last spline coefficient at zero for identifiability!")
-  
+  S <- crossprod(L[,-k]) # leaving out last column because parameter set to zero
+
   basis <- list(
-    type = type, 
-    knots = knots, 
-    w = w, 
-    degree = degree, 
+    type = type,
+    knots = knots,
+    w = w,
+    degree = degree,
     basis_pos = basis_pos
     )
-  
+
   out <- list(
     Z = B,
     S = S,
@@ -948,201 +747,254 @@ make_matrices_dens = function(x, # data vector
     xseq = xseq[(1:500)* (npoints/500) -(npoints/500)/2],
     basis = basis
   )
-  
+
   return(out)
 }
 
 # helper function, not exported
-make_splinecoef = function(model_matrices, 
-                           type = "real", 
+# unnormalised B-spline basis at x, knots including the boundary knots
+dens_basis = function(x, type, knots, degree){
+  if(type == "circular"){
+    cSplineDes(x, knots, ord = degree + 1)
+  } else{
+    nk <- length(knots)
+    bSpline(x, knots = knots[-c(1, nk)], Boundary.knots = knots[c(1, nk)],
+            degree = degree, intercept = TRUE)
+  }
+}
+
+# helper function, not exported
+make_splinecoef = function(model_matrices,
+                           type = "real",
                            par){
   basis_pos = model_matrices$basis$basis_pos
   k = length(basis_pos)
-  
-  # scaling
-  dens1 = rowSums(model_matrices$Z_predict)
-  scaling = sapply(1:k, function(i) dens1[which.min(abs(basis_pos[i] - model_matrices$xseq))])
-  
-  if(type == "real"){ # if density has support on the reals -> use normal distribution to initialize
-    beta = sapply(basis_pos, dnorm, mean = par$mean, sd = par$sd, log = TRUE)
-    if(is.vector(beta)) beta = matrix(beta, nrow = 1)
-    # rescaling to account for non-equidistant knot spacing
-    beta = t(t(beta) - log(apply(model_matrices$Z_predict, 2, max)))
-  } else if(type == "positive") { # if density has support on positive continuous -> use gamma distribution
-    # transformation to scale and shape
-    beta = sapply(basis_pos, dgamma2, mean = par$mean, sd = par$sd, log = TRUE)
-    if(is.vector(beta)) beta = matrix(beta, nrow = 1)
-    # rescaling to account for non-equidistant knot spacing
-    beta = t(t(beta) - log(apply(model_matrices$Z_predict, 2, max)))
-  } else if(type == "circular") {
-    beta = sapply(basis_pos, LaMa::dvm, mu = par$mean, kappa = par$concentration, log = TRUE)
-    if(is.vector(beta)) beta = matrix(beta, nrow = 1)
+
+  if(type == "circular") {
+    kappa = if(is.null(par$kappa)) par$concentration else par$kappa # accept both names
+    beta = sapply(basis_pos, dvm, mu = par$mean, kappa = kappa, log = TRUE)
+  } else { # normal on the reals, gamma on the positive reals
+    ddist = if(type == "real") dnorm else dgamma2
+    beta = sapply(basis_pos, ddist, mean = par$mean, sd = par$sd, log = TRUE)
   }
+  if(is.vector(beta)) beta = matrix(beta, nrow = 1)
+
+  # rescaling to account for non-equidistant knot spacing
+  if(type != "circular") beta = t(t(beta) - log(apply(model_matrices$Z_predict, 2, max)))
 
   beta = beta - beta[,k]
-  # beta = beta - beta[,k-1]
-  message("Parameter matrix excludes the last column. Add zero column using 'cbind(coef, 0)' in your loss function!\n")
-  return(beta[,-k])
+  return(beta[,-k, drop = FALSE]) # stays a matrix for one state
 }
 
 #' Build the design and penalty matrices for smooth density estimation
-#' 
+#'
 #' @description
 #' This high-level function can be used to prepare objects needed to estimate mixture models of smooth densities using P-Splines.
-#' 
+#'
 #' @details
 #' Under the hood, \code{\link{make_matrices_dens}} is used for the actual construction of the design and penalty matrices.
 #'
 #' You can provide one or multiple data streams of different types (real, positive, circular) and specify initial means and standard deviations/ concentrations for each data stream. This information is then converted into suitable spline coefficients.
-#' \code{smooth_dens_construct} then constructs the design and penalty matrices for standardised B-splines basis functions (integrating to one) for each data stream.
+#' \code{smoothdens} then constructs the design and penalty matrices for standardised B-splines basis functions (integrating to one) for each data stream.
 #' For types \code{"real"} and \code{"circular"} the knots are placed equidistant in the range of the data, for type \code{"positive"} the knots are placed using polynomial spacing.
 #'
-#' @param data named data frame of 1 or multiple data streams
-#' @param par nested named list of initial means and sds/concentrations for each data stream
-#' @param type vector of length 1 or number of data streams containing the type of each data stream, either \code{"real"} for data on the reals, \code{"positive"} for data on the positive reals or \code{"circular"} for angular data.
-#' @param k vector of length 1 or number of data streams containing the number of basis functions for each data stream
-#' @param knots optional list of knots vectors (including the boundary knots) to be used for basis construction. 
+#' The last spline coefficient of each state is fixed at zero for identifiability, hence \code{coef} has \code{k - 1} columns.
+#' \code{density(beta)} takes care of this: it maps the coefficient matrix to the \code{allprobs} matrix, with rows of missing observations equal to one.
+#'
+#' @param x data vector for one data stream, or named data frame or list of several data streams
+#' @param par list of initial means and sds (\code{"real"}, \code{"positive"}) or means and concentrations (\code{"circular"}, called \code{kappa} or \code{concentration}), one value per state.
+#' For several data streams, a named list of such lists.
+#' @param type type of each data stream, either \code{"real"} for data on the reals, \code{"positive"} for data on the positive reals or \code{"circular"} for angular data.
+#' @param k number of basis functions for each data stream
+#' @param knots optional vector of knots (including the boundary knots) to be used for basis construction, for several data streams a named list of such vectors.
 #' If not provided, the knots are placed equidistantly for \code{"real"} and \code{"circular"} and using polynomial spacing for \code{"positive"}.
 #'
 #' For \code{"real"} and \code{"positive"} \code{k - degree + 1} knots are needed, for \code{"circular"} \code{k + 1} knots are needed.
 #' @param degree degree of the B-spline basis functions for each data stream, defaults to cubic B-splines
 #' @param diff_order order of differencing used for the P-Spline penalty matrix for each data stream. Defaults to second-order differences.
+#' @param pow power for polynomial knot spacing, only used for \code{type = "positive"}
+#' @param npoints number of points used in the numerical integration for normalizing the B-spline basis functions
 #'
-#' @return a nested list containing the design matrices \code{Z}, the penalty matrices \code{S}, the initial coefficients \code{coef} the prediction design matrices \code{Z_predict}, the prediction grids \code{xseq}, and details for the basis expansion for each data stream.
+#' \code{type}, \code{k}, \code{degree}, \code{diff_order}, \code{pow} and \code{npoints} can be of length 1 or one per data stream (named or in the order of \code{x}).
+#'
+#' @return For one data stream, an object of class \code{"smoothdens"}: a list containing the design matrix \code{Z}, the penalty matrix \code{S}, the initial coefficients \code{coef}, the prediction design matrix \code{Z_predict}, the prediction grid \code{xseq}, details for the basis expansion \code{basis}, and the function \code{density(beta)}.
+#' For several data streams, a named list of such objects.
+#' @seealso \code{\link[=predict.smoothdens]{predict}} for the estimated densities
 #' @export
 #'
 #' @examples
-#' ## 3 data streams, each with one distribution
-#' # normal data with mean 0 and sd 1
-#' x1 = rnorm(100, mean = 0, sd = 1)
-#' # gamma data with mean 5 and sd 3
-#' x2 = rgamma2(100, mean = 5, sd = 3)
-#' # circular data
-#' x3 = rvm(100, mu = 0, kappa = 2)
-#' 
-#' data = data.frame(x1 = x1, x2 = x2, x3 = x3)
-#' 
+#' ## one data stream, mixture of two normals
+#' x = c(rnorm(100, 0, 1), rnorm(100, 5, 1))
+#' dens = smoothdens(x, par = list(mean = c(0, 5), sd = c(1, 1)))
+#'
+#' Z = dens$Z # design matrix
+#' S = dens$S # penalty matrix
+#' beta = dens$coef # initial coefficients
+#' allprobs = dens$density(beta) # use this in the likelihood function
+#'
+#' ## 3 data streams
+#' data = data.frame(x1 = rnorm(100, mean = 0, sd = 1),
+#'                   x2 = rgamma2(100, mean = 5, sd = 3),
+#'                   x3 = rvm(100, mu = 0, kappa = 2))
+#'
 #' par = list(x1 = list(mean = 0, sd = 1),
 #'            x2 = list(mean = 5, sd = 3),
-#'            x3 = list(mean = 0, concentration = 2))
-#' 
-#' SmoothDens = smooth_dens_construct(data, 
-#'                                    par,
-#'                                    type = c("real", "positive", "circular"))
-#'                              
-#' # extracting objects for x1
-#' Z1 = SmoothDens$Z$x1
-#' S1 = SmoothDens$S$x1
-#' coefs1 = SmoothDens$coef$x1
-#' 
-#' ## one data stream, but mixture of two distributions
-#' # normal data with mean 0 and sd 1
-#' x = rnorm(100, mean = 0, sd = 1)
-#' data = data.frame(x = x)
-#' 
-#' # now parameters for mixture of two normals
-#' par = list(x = list(mean = c(0, 5), sd = c(1,1)))
-#' 
-#' SmoothDens = smooth_dens_construct(data, par = par)
-#' 
-#' # extracting objects 
-#' Z = SmoothDens$Z$x
-#' S = SmoothDens$S$x
-#' coefs = SmoothDens$coef$x
+#'            x3 = list(mean = 0, kappa = 2))
+#'
+#' dens = smoothdens(data, par, type = c("real", "positive", "circular"))
+#'
+#' # objects for x1
+#' Z1 = dens$x1$Z
+#' allprobs = dens$x1$density(dens$x1$coef) *
+#'   dens$x2$density(dens$x2$coef) *
+#'   dens$x3$density(dens$x3$coef)
+smoothdens <- function(x,
+                       par,
+                       type = "real",
+                       k = 25,
+                       knots = NULL,
+                       degree = 3,
+                       diff_order = 2,
+                       pow = 0.5,
+                       npoints = 1e4
+){
+  # several data streams: one object per stream
+  if(is.list(x)){
+    varnames <- names(x)
+    if(is.null(varnames) || !all(varnames %in% names(par))){
+      stop("'par' must be a named nested list with names corresponding to the datastreams")
+    }
+    # value of an argument for stream i: length 1, named or in order
+    pick <- function(arg, i){
+      if(length(arg) == 1) return(arg)
+      if(length(arg) != length(varnames)){
+        stop(paste0("'", deparse(substitute(arg)), "' must be of length 1 or equal to the number of datastreams"))
+      }
+      if(is.null(names(arg))) arg[[i]] else arg[[varnames[i]]]
+    }
+    out <- lapply(seq_along(varnames), function(i){
+      thisname <- varnames[i]
+      smoothdens(x[[thisname]], par[[thisname]],
+                 type = pick(type, i), k = pick(k, i), knots = knots[[thisname]],
+                 degree = pick(degree, i), diff_order = pick(diff_order, i),
+                 pow = pick(pow, i), npoints = pick(npoints, i))
+    })
+    names(out) <- varnames
+    return(out)
+  }
+
+  if(is.null(par$mean)){
+    stop("'par' must contain initial means, e.g. list(mean = c(0, 5), sd = c(1, 1))")
+  }
+
+  modmat <- make_matrices_dens(x = x,
+                               type = type,
+                               k = k,
+                               knots = knots,
+                               degree = degree,
+                               diff_order = diff_order,
+                               pow = pow,
+                               npoints = npoints)
+  modmat$coef <- make_splinecoef(modmat, type = modmat$basis$type, par = par)
+  modmat$density <- dens_fun(modmat$Z)
+
+  out <- modmat[c("Z", "S", "coef", "Z_predict", "xseq", "basis", "density")]
+  class(out) <- "smoothdens"
+  return(out)
+}
+
+# helper function, not exported
+# weights from coefficients, last one fixed at zero (multinomial logit)
+dens_weights = function(beta){
+  alpha <- exp(cbind(beta, 0))
+  alpha / rowSums(alpha)
+}
+
+# helper function, not exported
+# function mapping beta to allprobs, only keeps Z in its environment
+dens_fun = function(Z){
+  ind <- which(!is.na(Z[,1])) # only for non-NA obs.
+  function(beta){
+    alpha <- dens_weights(beta)
+    allprobs <- matrix(1, nrow(Z), nrow(alpha))
+    allprobs[ind,] <- Z[ind,] %*% t(alpha)
+    allprobs
+  }
+}
+
+#' Estimated smooth densities
+#'
+#' Evaluates the smooth densities built with \code{\link{smoothdens}} for given spline coefficients, e.g. to plot the estimated state-dependent densities.
+#'
+#' @param object object of class \code{"smoothdens"} for one data stream
+#' @param coef coefficient matrix, one row per state, without the last column fixed at zero
+#' @param x optional points to evaluate the densities at, defaults to the prediction grid \code{object$xseq}
+#' @param ... unused
+#'
+#' @return list with the points \code{x} and the matrix \code{density} of densities, one row per point and one column per state
+#' @export
+#'
+#' @examples
+#' x = c(rnorm(100, 0, 1), rnorm(100, 5, 1))
+#' dens = smoothdens(x, par = list(mean = c(0, 5), sd = c(1, 1)))
+#' # densities at the initial coefficients
+#' pred = predict(dens, coef = dens$coef)
+#' matplot(pred$x, pred$density, type = "l", lty = 1)
+predict.smoothdens = function(object, coef, x = NULL, ...){
+  if(is.null(x)){
+    x <- object$xseq
+    Z <- object$Z_predict
+  } else{
+    b <- object$basis
+    xw <- if(b$type == "circular") (x + pi) %% (2 * pi) - pi else x # wrap angles to [-pi, pi)
+    Z <- t(t(dens_basis(xw, b$type, b$knots, b$degree)) * b$w)
+  }
+  list(x = x, density = Z %*% t(dens_weights(coef)))
+}
+
+#' Build the design and penalty matrices for smooth density estimation
+#'
+#' @description
+#' \code{smooth_dens_construct()} is deprecated, use \code{\link{smoothdens}} instead.
+#' It returns the same objects, but ordered by component first and data stream second.
+#'
+#' @param data named data frame of 1 or multiple data streams
+#' @inheritParams smoothdens
+#'
+#' @return a nested list containing the design matrices \code{Z}, the penalty matrices \code{S}, the initial coefficients \code{coef} the prediction design matrices \code{Z_predict}, the prediction grids \code{xseq}, and details for the basis expansion for each data stream.
+#' @export
+#' @keywords internal
+#'
+#' @examples
+#' data = data.frame(x = rnorm(100))
+#' # deprecated:
+#' # SmoothDens = smooth_dens_construct(data, par = list(x = list(mean = 0, sd = 1)))
+#' # use instead:
+#' dens = smoothdens(data$x, par = list(mean = 0, sd = 1))
 smooth_dens_construct <- function(data,
                                   par,
                                   type = "real",
                                   k = 25,
                                   knots = NULL,
-                                  # quantile = FALSE,
                                   degree = 3,
                                   diff_order = 2
 ){
-  quantile <- FALSE # no quantile spacing if knots are not custom
-  
+  .Deprecated("smoothdens", package = "LaMa",
+              msg = paste("'smooth_dens_construct()' is deprecated; use 'smoothdens()' instead."))
+
   if(!is.data.frame(data)){
     stop("data must be a data frame")
   }
-  
-  nStreams <- ncol(data)
-  nObs <- nrow(data)
-  varnames <- colnames(data)
-  
-  if(length(par) == length(varnames)){
-    if(is.null(names(par))){
-      stop("'par' must be a named nested list with names corresponding to the datastreams")
-    } else if(any(names(par) != varnames)){
-      stop("'par' must be a named nested list with names corresponding to the datastreams")
-    }
-  } else{
-    stop("'par' must be a named nested list with names corresponding to the datastreams")
-  }
-  
-  # processing input arguments
-  if(length(k) == 1){
-    k = rep(k, nStreams)
-  } else if(length(k) != nStreams){
-    stop("'k' must be a scalar or a vector of length equal to the number of datastreams")
-  }
-  if(length(type) == 1){
-    type = rep(type, nStreams)
-  } else if(length(type) != nStreams){
-    stop("'type' must be of length 1 or equal to the number of datastreams")
-  }
-  if(length(degree) == 1){
-    degree = rep(degree, nStreams)
-  } else if(length(degree) != nStreams){
-    stop("'degree' must be of length 1 or equal to the number of datastreams")
-  }
-  # if(length(quantile) == 1){
-  #   quantile = rep(quantile, nStreams)
-  # } else if(length(quantile) != nStreams){
-  #   stop("'quantile' must be of length 1 or equal to the number of datastreams")
-  # }
-  if(length(diff_order) == 1){
-    diff_order = rep(diff_order, nStreams)
-  } else if(length(diff_order) != nStreams){
-    stop("'diff_order' must be of length 1 or equal to the number of datastreams")
-  }
-  
-  listseed = vector("list", length = nStreams)
-  names(listseed) = varnames
-  Z = S = Z_predict = xseq = betastart = basis = listseed
-  
-  for(i in seq_len(nStreams)){
-    thisname = varnames[i]
-    
-    msg <- paste0("Data stream: ", thisname)
-    message(msg)
-    
-    modmat <- make_matrices_dens(x = data[[thisname]], 
-                                type = type[i], 
-                                k = k[i], 
-                                knots = knots[[thisname]],
-                                # quantile = quantile[i],
-                                degree = degree[i], 
-                                diff_order = diff_order[i])
-    Z[[thisname]] = modmat$Z
-    S[[thisname]] = modmat$S
-    Z_predict[[thisname]] = modmat$Z_predict
-    xseq[[thisname]] = modmat$xseq
-    basis[[thisname]] = modmat$basis
-    betastart[[thisname]] = make_splinecoef(modmat, type = type[i], par = par[[thisname]])
-  }
-  
-  out <- list(
-    Z = Z,
-    S = S,
-    coef = betastart,
-    Z_predict = Z_predict,
-    xseq = xseq,
-    basis = basis
-  )
-  
+  dens <- smoothdens(as.list(data), par, type = type, k = k, knots = knots,
+                     degree = degree, diff_order = diff_order)
+
+  # old layout: component first, then data stream
+  comps <- c("Z", "S", "coef", "Z_predict", "xseq", "basis")
+  out <- lapply(stats::setNames(comps, comps), function(n) lapply(dens, `[[`, n))
+
   class(out) <- "SmoothDens"
   return(out)
 }
-
 
 #' Compute the design matrix for a trigonometric basis expansion
 #'

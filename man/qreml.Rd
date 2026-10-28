@@ -2,7 +2,8 @@
 % Please edit documentation in R/qreml_functions.R
 \name{qreml}
 \alias{qreml}
-\title{Quasi restricted maximum likelihood (qREML) algorithm for models with penalised splines or simple i.i.d. random effects}
+\title{Automatic smoothness selection for arbitrary 
+statistical models with penalised splines, simple random effects, or tensorproducts}
 \usage{
 qreml(
   pnll,
@@ -11,116 +12,143 @@ qreml(
   random,
   map = NULL,
   silent = 1,
-  psname = "lambda",
-  alpha = 0.3,
-  smoothing = 1,
+  spname = NULL,
+  tol_edf = 0.01,
   maxiter = 100,
-  tol = 1e-04,
+  alpha = 0.1,
+  tol = 0.01,
+  smoothing = 1,
   method = "BFGS",
+  lsp_max = 15,
+  step_small = 0.05,
+  max_halve = 6,
   control = list(),
-  conv_crit = "relchange",
   spHess = FALSE,
   joint_unc = FALSE,
   saveall = FALSE
 )
 }
 \arguments{
-\item{pnll}{penalised negative log-likelihood function that is structured as dictated by \code{RTMB} and uses the \code{\link{penalty}} function from \code{LaMa} to compute the penalty
+\item{pnll}{penalised negative log-likelihood function that is structured as dictated by \code{RTMB} and uses the \code{\link{penalty}} or \code{\link{penalty2}} function to compute the penalty}
 
-Needs to be a function of the named list of initial parameters \code{par} only.}
+\item{par}{named list of initial parameters}
 
-\item{par}{named list of initial parameters
-
-The random effects/ spline coefficients can be vectors or matrices, the latter summarising several random effects of the same structure, each one being a row in the matrix.}
-
-\item{dat}{initial data list that contains the data used in the likelihood function, hyperparameters, and the \strong{initial penalty strength} vector
-
-If the initial penalty strength vector is \strong{not} called \code{lambda}, the name it has in \code{dat} needs to be specified using the \code{psname} argument below.
-Its length needs to match the to the total number of random effects.}
+\item{dat}{initial data list that contains the data used in the likelihood function, hyperparameters, and the \strong{initial penalty strength} vector,
+called \code{sp} or \code{lambda} (see \code{spname})}
 
 \item{random}{vector of names of the random effects/ penalised parameters in \code{par}
 
-\strong{Caution:} The ordering of \code{random} needs to match the order of the random effects passed to \code{\link{penalty}} inside the likelihood function.}
+\strong{Caution:} The ordering of \code{random} needs to match the order of the random effects passed to \code{penalty}.}
 
-\item{map}{optional map argument, containing factor vectors to indicate parameter sharing or fixing.
+\item{map}{optional map argument, containing factor vectors to indicate parameter sharing or fixing}
 
-Needs to be a named list for a subset of fixed effect parameters or penalty strength parameters. 
-For example, if the model has four penalty strength parameters, \code{map[[psname]]} could be \code{factor(c(NA, 1, 1, 2))} to fix the first penalty strength parameter, estimate the second and third jointly, and estimate the fourth separately.}
+\item{silent}{integer silencing level: 0 corresponds to full printing of inner and outer iterations, 1 to printing of outer iterations only, and 2 to no printing}
 
-\item{silent}{integer silencing level: 0 corresponds to full printing of inner and outer iterations, 1 to printing of outer iterations only, and 2 to no printing.}
+\item{spname}{optional name of the penalty strength vector in \code{dat}.
 
-\item{psname}{optional name given to the penalty strength parameter in \code{dat}. Defaults to \code{"lambda"}.}
+By default, \code{dat$sp} is used if present, otherwise \code{dat$lambda}.
+Hence, if \code{dat} contains \code{sp}, \code{lambda} is free to be used for something else, e.g. the mean of a Poisson distribution.
+In the likelihood function, the penalty strengths are accessed by the same name, e.g. \code{penalty(beta, S, sp)}, as \code{qreml()} replaces them with the current values in each iteration.
+The returned model object stores them under this name as well, e.g. \code{mod$sp}.}
 
-\item{alpha}{optional hyperparamater for exponential smoothing of the penalty strengths.
+\item{tol_edf}{convergence tolerance on the \strong{effective degrees of freedom}.
 
-For larger values smoother convergence is to be expected but the algorithm may need more iterations.}
+This is the primary convergence criterion. The iteration stops once no smooth's effective degrees of freedom has changed by more than \code{tol_edf} across the last four outer iterations, provided the step in \code{log(lambda)} is also small.
+The effective degrees of freedom are what say whether the \strong{fitted smooth} is still changing, and unlike a tolerance on the restricted likelihood they mean the same thing on every model, being measured in effective parameters rather than in nats.
+The penalty strengths themselves are a poor proxy: \code{lambda} can slide along a flat ridge for many iterations, moving substantially in relative terms, while neither the criterion nor the fit changes appreciably.}
 
-\item{smoothing}{optional scaling factor for the final penalty strength parameters
+\item{maxiter}{maximum number of outer iterations}
 
-Increasing this beyond one will lead to a smoother final model. Can be an integer or a vector of length equal to the length of the penalty strength parameter.}
+\item{alpha}{smallest factor by which a penalty strength may \strong{decrease} in one outer iteration, a number in [0, 1). Defaults to 0.1.
 
-\item{maxiter}{maximum number of iterations in the outer optimisation over the penalty strength parameters.}
+Penalty strengths are free to increase as fast as the update proposes, but cannot collapse faster than this per iteration.
+Reducing a penalty strength too quickly can push the inner optimisation into a local optimum or a numerically awkward region, which matters more here than in a GAM because the likelihood is user-written.
+Set to zero to remove the floor entirely. Step length is handled separately, by \code{max_halve} and the adaptive multiplier.}
 
-\item{tol}{Convergence tolerance for the penalty strength parameters.}
+\item{tol}{\strong{fallback} convergence tolerance, on the restricted log-likelihood. Defaults to 0.01.
 
-\item{method}{optimisation method to be used by \code{\link[stats:optim]{optim}}. Defaults to \code{"BFGS"}, but might be changed to \code{"L-BFGS-B"} for high-dimensional settings.}
+Used only when the effective degrees of freedom are not trustworthy, i.e.\ when they fall outside \eqn{[0, K_i]}, which happens when the data Hessian is indefinite (see \code{tol_edf} and the returned \code{edf_valid}).
+The iteration then stops once the restricted log-likelihood has changed by less than \code{tol} over the last four outer iterations.
+A tolerance in nats is not comparable across models, which is why it is the fallback rather than the primary criterion.}
 
-\item{control}{list of control parameters for \code{\link[stats:optim]{optim}} to use in the inner optimisation. Here, \code{optim} uses the \code{BFGS} method which cannot be changed.
+\item{smoothing}{optional scaling factor for the final penalty strength parameters. Increasing this beyond one leads to a smoother final model}
 
-We advise against changing the default values of \code{reltol} and \code{maxit} as this can decrease the accuracy of the Laplace approximation.}
+\item{method}{inner optimisation method to be used by \code{\link[stats:optim]{optim}}. Defaults to \code{"BFGS"}}
 
-\item{conv_crit}{character, convergence criterion for the penalty strength parameters. Can be \code{"relchange"} (default) or \code{"gradient"}.}
+\item{lsp_max}{largest value allowed for \code{log(lambda)}. Defaults to 15, as in \code{mgcv}, i.e. penalty strengths saturate at roughly 3.3e6}
 
-\item{spHess}{logical, if \code{TRUE}, sparse AD Hessian is used in each outer iteration. If your Hessian is large and sparse (many cross derivatives are 0), this will speed up the computations a lot. 
-If your Hessian is dense, this will slow down the computations slightly and might require significantly more memory.}
+\item{step_small}{size of a step in \code{log(lambda)} below which the step multiplier is allowed to double. Defaults to 0.05, as in \code{mgcv}}
+
+\item{max_halve}{maximum number of times a step that decreases the restricted likelihood is halved before it is accepted anyway. Defaults to 6.
+
+\code{mgcv} never shortens below the full Fellner-Schall step and accepts a worse one instead, which for a user-written likelihood can drift downhill for tens of iterations.}
+
+\item{control}{list of control parameters for \code{\link[stats:optim]{optim}} to use in the inner optimisation}
+
+\item{spHess}{logical, if \code{TRUE}, the sparse automatic differentiation Hessian is used for evaluation. The factorisation is dense either way}
 
 \item{joint_unc}{logical, if \code{TRUE}, joint \code{RTMB} object is returned allowing for joint uncertainty quantification}
 
-\item{saveall}{logical, if \code{TRUE}, then all model objects from each iteration are saved in the final model object.}
+\item{saveall}{logical, if \code{TRUE}, then all model objects from each iteration are saved in the final model object}
 }
 \value{
-model object of class 'qremlModel'. This is a list containing:
-\item{...}{everything that is reported inside \code{pnll} using \code{RTMB::REPORT()}. When using \code{forward}, \code{tpm_g}, etc., this may involve automatically reported objects.}
-\item{obj}{\code{RTMB} AD object containing the final conditional model fit}
-\item{psname}{final penalty strength parameter vector}
-\item{all_psname}{list of all penalty strength parameter vectors over the iterations}
-\item{par}{named estimated parameter list in the same structure as the initial \code{par}. Note that the name \code{par} is not fixed but depends on the original name of your \code{par} list.}
-\item{relist_par}{function to convert the estimated parameter vector to the estimated parameter list. This is useful for uncertainty quantification based on sampling from a multivariate normal distribution.}
-\item{par_vec}{estimated parameter vector}
-\item{llk}{unpenalised log-likelihood at the optimum}
-\item{n_fixpar}{number of fixed, i.e. unpenalised, parameters}
-\item{edf}{overall effective number of parameters}
-\item{all_edf}{list of effective number of parameters for each smooth}
-\item{Hessian_condtional}{final Hessian of the conditional penalised fit}
-\item{obj_joint}{if \code{joint_unc = TRUE}, joint \code{RTMB} object for joint uncertainty quantification in model and penalty parameters.}
+model object of class \code{"qremlModel"}, inheriting from \code{"LaMaModel"} (see \code{\link{lama}}), carrying the fitted quantities, the smoothness selection diagnostics shown by \code{\link{summary.qremlModel}}, and \code{outer_hessian()}, the outer Hessian that \code{\link{sdreport_outer}} turns into standard errors
 }
 \description{
-This algorithm can be used very flexibly to fit statistical models that involve \strong{penalised splines} or simple \strong{i.i.d. random effects}, i.e. that have penalties of the form
-\deqn{0.5 \sum_{i} \lambda_i b_i^T S_i b_i,}
-with smoothing parameters \eqn{\lambda_i}, coefficient vectors \eqn{b_i}, and fixed penalty matrices \eqn{S_i}.
+Efficiently fits models involving quadratic penalties of the form
+\deqn{\sum_{i} \lambda_i b^T S_i b,}
+by combining automatic differentiation via \code{RTMB} with a custom implementation of the extended Fellner-Schall update.
 
-The \strong{qREML} algorithm is typically much faster than REML or marginal ML using the full Laplace approximation method, but may be slightly less accurate regarding the estimation of the penalty strength parameters.
+Users only need to supply a custom penalised log-likelihood function that calls \code{penalty()} or \code{penalty2()}.
+}
+\details{
+Step size control follows the extended Fellner-Schall implementation in \code{mgcv} while convergence is judged on the effective degrees of freedom (differing from \code{mgcv}).
 
-Under the hood, \code{qreml} uses the R package \code{RTMB} for automatic differentiation in the inner optimisation.
-The user has to specify the \strong{penalised negative log-likelihood function} \code{pnll} structured as dictated by \code{RTMB} and use the \code{\link{penalty}} function to compute the quadratic-form penalty inside the likelihood.
+\strong{The criterion.} The penalty strengths are chosen to maximise the Laplace-approximate restricted log-likelihood
+\deqn{V(\lambda) = \ell_p(\hat{b}; \lambda) + \tfrac{1}{2} \log |S_\lambda|_+ - \tfrac{1}{2} \log |J|,}{V(lambda) = l_p(b; lambda) + 0.5 log|S_lambda|_+ - 0.5 log|J|,}
+where \eqn{\ell_p}{l_p} is the penalised log-likelihood at its mode \eqn{\hat{b}}{b}, \eqn{S_\lambda = \sum_i \lambda_i S_i}{S_lambda = sum_i lambda_i S_i}, \eqn{|\cdot|_+}{|.|_+} denotes the product of the positive eigenvalues, and \eqn{J} is the Hessian of the penalised negative log-likelihood at \eqn{\hat{b}}{b}.
+Every outer iteration refits the inner problem to obtain \eqn{\hat{b}}{b} and \eqn{J}, so one call is a sequence of complete model fits, each warm started at the previous one.
+
+\strong{The update.} The penalty strengths are updated multiplicatively, \eqn{\lambda_i \leftarrow \lambda_i r_i}{lambda_i <- lambda_i r_i}, by the extended Fellner-Schall ratio
+\deqn{r_i = \frac{\mathrm{tr}(S_\lambda^- S_i) - \mathrm{tr}(J^{-1} S_i)}{\hat{b}^T S_i \hat{b}},}{r_i = (tr(S_lambda^- S_i) - tr(J^-1 S_i)) / (b^T S_i b),}
+which equals one exactly where \eqn{\partial V / \partial \lambda_i = 0}{dV/dlambda_i = 0} and otherwise moves \eqn{\lambda_i} in the direction of the gradient, without ever making it negative.
+For a smooth carrying a single penalty the first trace is \eqn{\mathrm{rank}(S_i) / \lambda_i}{rank(S_i) / lambda_i}, obtained once from an eigendecomposition instead of at every iteration.
+Only the diagonal blocks of \eqn{J^{-1}}{J^-1} enter, and these come from the Cholesky factor by triangular solves rather than from a full inverse.
+
+\strong{Step control.} The step is taken in \eqn{\log \lambda}{log(lambda)} and scaled by a multiplier that persists across iterations: it doubles while the criterion keeps improving and is halved, up to \code{max_halve} times, while it does not.
+A step that still worsens the criterion after that many halvings is accepted, which is the only way the iteration can move downhill.
+In addition no penalty strength may fall by more than a factor \code{alpha} in one iteration, and \eqn{\log \lambda}{log(lambda)} is capped at \code{lsp_max}.
+The fit returned is the best iterate seen, not necessarily the last one.
+
+\strong{Convergence.} The iteration stops once no smooth's effective degrees of freedom
+\deqn{\mathrm{edf}_i = K_i - \mathrm{tr}(J^{-1} \lambda_i S_i)}{edf_i = K_i - tr(J^-1 lambda_i S_i)}
+has moved by more than \code{tol_edf} over the last four iterations, provided the step in \eqn{\log \lambda}{log(lambda)} is also small; see \code{tol_edf}.
+Being eigenvalue sums, the effective degrees of freedom must lie in \eqn{[0, K_i]}, and they leave that range only if the data Hessian is indefinite, in which case the traces driving the update are not the quantities the method assumes.
+That is reported rather than repaired, through the returned \code{edf_valid} and a warning, and the criterion then falls back to \code{tol} on the restricted log-likelihood.
+
+\strong{Numerics.} \eqn{J} is the exact automatic differentiation Hessian, which matters because the finite differencing error of \code{\link[stats:optimHess]{optimHess}} is of the same order as the criterion differences the convergence test has to resolve.
+It is factorised by a pivoted Cholesky decomposition after scaling to a unit diagonal; should it not be positive definite, a ridge is added and reported through the returned \code{hessian_repaired}.
+
+\strong{Uncertainty.} The returned \code{outer_hessian()} gives the Hessian of the negative restricted log-likelihood in the penalty strengths, which \code{\link{sdreport_outer}} turns into standard errors.
+Note that these describe the curvature of \eqn{V} only, and treat the approximation to it as exact.
 }
 \examples{
-data = trex[1:1000,] # subset
+data = trex[1:2000,] # subset of the data
 
 # initial parameter list
 par = list(logmu = log(c(0.3, 2.5)), # step mean
            logsigma = log(c(0.3, 1.5)), # step sd
            beta0 = c(-2,-2), # state process intercept
-           betaspline = matrix(rep(0, 18), nrow = 2)) # state process spline coefs
+           beta_spline = matrix(rep(0, 18), nrow = 2)) # state process spline coefs
           
-# data object with initial penalty strength lambda
+# data object with initial penalty strength sp
 dat = list(step = data$step, # step length
            tod = data$tod, # time of day covariate
            N = 2, # number of states
-           lambda = rep(10,2)) # initial penalty strength
+           sp = rep(20,2)) # initial penalty strength
 
 # building model matrices
-modmat = make_matrices(~ s(tod, bs = "cp"), 
+modmat = modmat(~ s(tod, bs = "cp"), 
                        data = data.frame(tod = 1:24), 
                        knots = list(tod = c(0,24))) # wrapping points
 dat$Z = modmat$Z # spline design matrix
@@ -129,24 +157,26 @@ dat$S = modmat$S # penalty matrix
 # penalised negative log-likelihood function
 pnll = function(par) {
   getAll(par, dat) # makes everything contained available without $
-  Gamma = tpm_g(Z, cbind(beta0, betaspline), ad = TRUE) # transition probabilities
-  delta = stationary_p(Gamma, t = 1, ad = TRUE) # initial distribution
+  Gamma = tpm(cbind(beta0, beta_spline), Z) # transition probabilities
+  delta = stationary_p(Gamma, t = tod[1] \%\% 24 + 1) # initial distribution
   mu = exp(logmu) # step mean
   sigma = exp(logsigma) # step sd
   # calculating all state-dependent densities
   allprobs = matrix(1, nrow = length(step), ncol = N)
   ind = which(!is.na(step)) # only for non-NA obs.
   for(j in 1:N) allprobs[ind,j] = dgamma2(step[ind],mu[j],sigma[j])
-  -forward_g(delta, Gamma[,,tod], allprobs) +
-      penalty(betaspline, S, lambda) # this does all the penalization work
+  -forward(delta, Gamma[,,tod], allprobs) +
+      penalty(beta_spline, S, sp) # this does all the penalization work
 }
 
 # model fitting
-mod = qreml(pnll, par, dat, random = "betaspline", silent = 2)
+mod = qreml(pnll, par, dat, random = "beta_spline", silent = 2)
 }
 \references{
+Wood, S. N., & Fasiolo, M. (2017). A generalized Fellner-Schall method for smoothing parameter optimization with application to Tweedie location, scale and shape models. Biometrics, 73(4), 1071-1081.
+
 Koslik, J. O. (2024). Efficient smoothness selection for nonparametric Markov-switching models via quasi restricted maximum likelihood. arXiv preprint arXiv:2411.11498.
 }
 \seealso{
-\code{\link{penalty}} and \code{\link{penalty2}} to compute the penalty inside the likelihood function
+\code{\link{penalty}} and \code{\link{penalty2}} to compute the penalty inside the likelihood function, and \code{\link{qreml_old}} for the original algorithm
 }

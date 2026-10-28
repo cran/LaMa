@@ -53,7 +53,7 @@ nll_pool = function(par) {
   -forward(delta, Gamma, allprobs, trackID)
 }
 
-## ----model_pool, warning = FALSE, cache = TRUE--------------------------------
+## ----model_pool, warning = FALSE----------------------------------------------
 par = list(
   eta = rep(-2, N*(N-1)),    # initial t.p.m. parameters (logit scale)
   log_mu = log(c(15, 60)),   # initial state-dependent means (log scale)
@@ -70,7 +70,7 @@ obj_pool = MakeADFun(nll_pool, par, silent = TRUE)
 system.time(
   opt_pool <- nlminb(obj_pool$par, obj_pool$fn, obj_pool$gr)
 )
-mod_pool = report(obj_pool)
+mod_pool = lama(obj_pool)
 
 ## ----pool_results-------------------------------------------------------------
 mod_pool$mu     # true: 15, 60
@@ -146,7 +146,7 @@ obj_partial = MakeADFun(nll_partial, par, silent = TRUE)
 system.time(
   opt_partial <- nlminb(obj_partial$par, obj_partial$fn, obj_partial$gr)
 )
-mod_partial = report(obj_partial)
+mod_partial = lama(obj_partial)
 
 ## ----partial_results----------------------------------------------------------
 mod_partial$beta   # true: c(-2, -2, 1, -1)
@@ -218,7 +218,7 @@ jnll_re = function(par) {
   jnll - forward(Delta, Gamma, allprobs, trackID)
 }
 
-## ----model_re, warning = FALSE, cache = TRUE----------------------------------
+## ----model_re, warning = FALSE------------------------------------------------
 par = list(
   beta_0 = rep(-2, N*(N-1)),      # population-level intercepts
   log_sigma_u = log(c(1, 1)),     # log-SDs of random effects
@@ -238,7 +238,7 @@ obj_re = MakeADFun(jnll_re, par, random = "u", silent = TRUE)
 system.time(
   opt_re <- nlminb(obj_re$par, obj_re$fn, obj_re$gr)
 )
-mod_re = report(obj_re)
+mod_re = lama(obj_re)
 
 ## ----re_results---------------------------------------------------------------
 mod_re$sigma_u  # true: 1, 1

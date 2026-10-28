@@ -75,7 +75,7 @@ obj = MakeADFun(nll, par, silent = TRUE)
 system.time(
   opt <- nlminb(obj$par, obj$fn, obj$gr)
 )
-mod = report(obj)
+mod = lama(obj)
 
 ## ----results------------------------------------------------------------------
 mod$phi    # true: 0.95
@@ -141,7 +141,7 @@ obj_lap = MakeADFun(jnll, par_lap, random = "g", silent = TRUE)
 system.time(
   opt_lap <- nlminb(obj_lap$par, obj_lap$fn, obj_lap$gr)
 )
-mod_lap = report(obj_lap)
+mod_lap = lama(obj_lap)
 
 ## ----lap_results--------------------------------------------------------------
 mod_lap$phi    # true: 0.95

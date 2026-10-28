@@ -121,12 +121,12 @@ gdeterminant <- function(x, eps = NULL, log = TRUE) {
   }
 }
 
-## log(sum(exp(x))) # with numerical stability
-logspace_add <- function(x){
-  # Computes the log of the sum of exponentials of the input vector x
-  # This is useful for numerical stability when dealing with large numbers
-  max_x <- max(x)
-  max_x + log(sum(exp(x - max_x)))
+## row maxima of a matrix, also for advector (pmax does not work for advector)
+rowmax <- function(x){
+  if(inherits(x, "advector")) return(apply(x, 1, max))
+  m <- x[, 1]
+  for(j in seq_len(ncol(x))[-1]) m <- pmax(m, x[, j])
+  m
 }
 
 
@@ -297,4 +297,11 @@ LaMaColors <- function(ncolors) {
     "#E69F00", "#56B4E9", "#009E73", "#CC79A7", "#F0E442",
     "#0072B2", "#D55E00", "#6B4A9B", "#E8614A", "#008B99"
   )[seq_len(ncolors)]
+}
+
+# message that a function is deprecated, once per session (they are often called in likelihood functions)
+deprecated <- function(msg) {
+  if(msg %in% .lama_env$deprecated) return(invisible(NULL))
+  .lama_env$deprecated <- c(.lama_env$deprecated, msg)
+  message(msg)
 }

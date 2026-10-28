@@ -25,9 +25,10 @@ library(LaMa)
 head(trex)
 
 ## ----tod2---------------------------------------------------------------------
-modmat = make_matrices(~ s(tod, bs = "cp"), # formula
+modmat = modmat(~ s(tod, bs = "cp"), # formula
                        data = data.frame(tod = 1:24), # data
                        knots = list(tod = c(0, 24))) # where to wrap the cyclic basis
+modmat # formula and initial penalty strength
 Z = modmat$Z # spline design matrix
 S = modmat$S # penalty matrix
 
@@ -37,7 +38,7 @@ pnll = function(par) {
   # cbinding intercept and spline coefs, because intercept is not penalised
   Gamma = tpm(cbind(beta0, betaSpline), Z)
   # computing all periodically stationary distributions for easy access later
-  Delta = stationary_p(Gamma); REPORT(Delta)
+  Delta = stationary_p(Gamma)[c(2:24, 1), ]; REPORT(Delta) # row k for tod k
   # parameter transformations
   mu = exp(logmu); REPORT(mu)
   sigma = exp(logsigma); REPORT(sigma)
@@ -48,8 +49,8 @@ pnll = function(par) {
   for(j in 1:N){
     allprobs[ind,j] = dgamma2(step[ind],mu[j],sigma[j]) * dvm(angle[ind],0,kappa[j])
   }
-  -forward(Delta[tod[1],], Gamma[,,tod], allprobs) + # regular forward algorithm
-    penalty(betaSpline, S, lambda) # this does all the penalisation work
+  -forward(Delta[tod[1],], Gamma, allprobs, tod = tod) + # regular forward algorithm
+    penalty(betaSpline, S, sp) # this does all the penalisation work
 }
 
 ## ----todpar2------------------------------------------------------------------
@@ -57,7 +58,7 @@ par = list(logmu = log(c(0.3, 2.5)), # state-dependent mean step
            logsigma = log(c(0.3, 2)), # state-dependent sd step
            logkappa = log(c(0.1, 2)), # state-dependent concentration angle
            beta0 = c(-2, -2), # state process intercepts
-           betaSpline = matrix(rep(0, 2*(ncol(Z)-1)), nrow = 2)) # spline coefs
+           betaSpline = matrix(0, nrow = 2, ncol = ncol(Z)-1)) # spline coefs
 
 dat = list(step = trex$step, # observed steps
            angle = trex$angle, # observed angle
@@ -65,7 +66,7 @@ dat = list(step = trex$step, # observed steps
            tod = trex$tod, # time of day (used for indexing)
            Z = Z, # spline design matrix
            S = S, # penalty matrix
-           lambda = rep(100, 2)) # initial penalty strength
+           sp = rep_sp(modmat, 2)) # initial penalty strength, one per row of betaSpline
 
 ## ----trex_fit, message = FALSE------------------------------------------------
 system.time(
@@ -153,7 +154,7 @@ obj = MakeADFun(nll, par, silent = TRUE)
 opt = nlminb(obj$par, obj$fn, obj$gr)
 
 # reporting to get calculated quantities
-mod = report(obj)
+mod = lama(obj)
 
 # visualising the results
 color = LaMaColors(3)
@@ -165,23 +166,14 @@ for(j in 1:3) curve(mod$delta[j] * dnorm(x, mod$mu[j], mod$sigma[j]),
 
 ## ----smooth prep--------------------------------------------------------------
 # providing initial means and sds to initialise spline coefficients
-par0 = list(logODBA = list(mean = c(-4, -3.3, -2.8), sd = c(0.3, 0.2, 0.5)))
+par0 = list(mean = c(-4, -3.3, -2.8), sd = c(0.3, 0.2, 0.5))
 
-# construct the smooth density objects
-modmat = smooth_dens_construct(nessi["logODBA"], # only one data stream here
-                               par = par0)
-
-# par is nested named list: top layer: each data stream
-# for each data stream: initial means and standard deviations for each state
+# construct the smooth density object
+dens = smoothdens(nessi$logODBA, par = par0)
 
 # objects for model fitting
-Z = modmat$Z$logODBA # spline design matrix for logODBA
-S = modmat$S$logODBA # penalty matrix for logODBA
-beta = modmat$coef$logODBA # initial spline coefficients
-
-# objects for prediction
-Z_p = modmat$Z_predict$logODBA # prediction design matrix
-xseq = modmat$xseq$logODBA # prediction sequence of logODBA values
+S = dens$S # penalty matrix for logODBA
+beta = dens$coef # initial spline coefficients
 
 ## ----pnll2--------------------------------------------------------------------
 pnll = function(par){
@@ -190,25 +182,18 @@ pnll = function(par){
   Gamma = tpm(eta)
   delta = stationary(Gamma)
   # smooth state-dependent densities
-  alpha = exp(cbind(beta, 0))
-  alpha = alpha / rowSums(alpha) # multinomial logit link
-  REPORT(alpha)
-  allprobs = matrix(1, nrow(Z), N)
-  ind = which(!is.na(Z[,1])) # only for non-NA obs.
-  allprobs[ind,] = Z[ind,] %*% t(alpha)
+  allprobs = dens$density(beta)
   # forward algorithm + penalty
   -forward(delta, Gamma, allprobs) + 
-    penalty(beta, S, lambda)
+    penalty(beta, S, sp)
 }
 
 ## ----nessi_spline_fit---------------------------------------------------------
-par = list(beta = beta, # spline coefficients prepared by smooth_dens_construct()
+par = list(beta = beta, # spline coefficients prepared by smoothdens()
            eta = rep(-2, 6)) # initial transition matrix on logit scale
 
-dat = list(N = 3, # number of states
-           Z = Z, # spline design matrix
-           S = S, # spline penalty matrix
-           lambda = rep(10, 3)) # initial penalty strength vector
+dat = list(S = S, # spline penalty matrix
+           sp = rep(10, 3)) # initial penalty strength vector
 
 # fitting the model using qREML
 system.time(
@@ -216,7 +201,9 @@ system.time(
 )
 
 ## ----shark_smooth_results, fig.width = 9, fig.height = 5----------------------
-sDens = Z_p %*% t(mod2$alpha) # all three state-dependent densities on a grid
+pred = predict(dens, coef = mod2$par$beta)
+sDens = pred$density # all three state-dependent densities on a grid
+xseq = pred$x
 
 hist(nessi$logODBA, prob = TRUE, breaks = 50, bor = "white", main = "", xlab = "log(ODBA)")
 for(j in 1:3) lines(xseq, mod2$delta[j] * sDens[,j], col = color[j], lwd = 2)
@@ -227,7 +214,7 @@ data(energy, package = "MSwM")
 head(energy)
 
 ## ----modmat_energy------------------------------------------------------------
-modmat = make_matrices(~ s(Oil, k = 12, bs = "ps"), energy)
+modmat = modmat(~ s(Oil, k = 12, bs = "ps"), energy)
 Z = modmat$Z # design matrix
 S = modmat$S # penalty matrix (list)
 
@@ -249,22 +236,22 @@ pnll = function(par) {
                    dnorm(price, Mu[,2], Sigma[,2])) # state-dependent densities
   
   - forward(delta, Gamma, allprobs) +
-    penalty(list(betaSpline, alphaSpline), S, lambda)
+    penalty(list(betaSpline, alphaSpline), S, sp)
 }
 
 ## ----energy_fit---------------------------------------------------------------
 # initial parameter list
 par = list(eta = rep(-4, 2), # state process intercepts
            beta0 = c(2, 5), # state-dependent mean intercepts
-           betaSpline = matrix(0, nrow = 2, ncol = 11), # mean spline coef
+           betaSpline = matrix(0, nrow = 2, ncol = ncol(Z)-1), # mean spline coef
            alpha0 = c(0, 0), # state-dependent sd intercepts
-           alphaSpline = matrix(0, nrow = 2, ncol = 11)) # sd spline coef
+           alphaSpline = matrix(0, nrow = 2, ncol = ncol(Z)-1)) # sd spline coef
 
 # data, model matrices and initial penalty strength
 dat = list(price = energy$Price, 
            Z = Z, 
            S = S, 
-           lambda = rep(1e3, 4))
+           sp = rep_sp(modmat, 4)) # 2 rows each of betaSpline and alphaSpline
 
 # model fit
 system.time(

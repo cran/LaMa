@@ -66,11 +66,14 @@ opt$par
 opt$objective
 
 ## ----MLe----------------------------------------------------------------------
-mod = report(obj) # runs the reporting from the negative log-likelihood once
+mod = lama(obj) # runs the reporting from the negative log-likelihood once
 (delta = mod$delta) # stationary distribution
 (Gamma = mod$Gamma) # estimated tpm
 (mu = mod$mu) # estimated state-dependent means
 (sigma = mod$sigma) # estimated state-dependent sds
+
+## ----summary------------------------------------------------------------------
+summary(mod)
 
 ## ----decoding, fig.width = 7, fig.height = 4----------------------------------
 # manually
@@ -118,11 +121,14 @@ summary(sdr) # see ?summary.sdreport for more info
 # as.list(sdr, "Std", report = TRUE)
 
 ## ----pres, fig.width = 8, fig.height = 4--------------------------------------
+plot(mod)
+
+## ----pres_manual, fig.width = 8, fig.height = 4-------------------------------
 pres_step = pseudo_res(obs = trex$step, # observation sequence
                        dist = "gamma2", # which parametric CDF to use
                        par = list(mean = mu, sd = sigma), # estimated pars for that CDF
                        mod = mod) # model object
-plot(pres_step, hist = TRUE)
+all.equal(pres_step, pseudo_res(mod))
 
 ## ----error, eval = FALSE------------------------------------------------------
 # stop("Invalid argument to 'advector' (lost class attribute?)")

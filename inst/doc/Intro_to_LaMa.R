@@ -97,12 +97,12 @@ legend("topright", pch = 20, legend = c("state 1", "state 2"),
 ## ----stateprobs---------------------------------------------------------------
 probs = stateprobs(delta, Gamma, allprobs)
 
-## ----pseudores----------------------------------------------------------------
+## ----pseudores, fig.dim = c(8, 4)---------------------------------------------
 pres = pseudo_res(x, # observations
                   "norm", # parametric distribution to use
                   list(mean = mu, sd = sigma), # parameters for that distribution
                   probs) # local state probabilities
 
 # use the plotting method for LaMaResiduals
-plot(pres, hist = TRUE)
+plot(pres)
 

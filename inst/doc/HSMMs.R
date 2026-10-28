@@ -119,7 +119,7 @@ nll_muskox = function(par, step, N, agsizes){
   -forward_s(delta, Gamma, allprobs, agsizes)
 }
 
-## ----model_muskox, warning = FALSE, cache = TRUE------------------------------
+## ----model_muskox, warning = FALSE--------------------------------------------
 # intial values
 par = c(log(c(4, 50, 300, 4, 50, 300)), # state-dependent mean and sd
                log(c(3,3,5)), # dwell time means
